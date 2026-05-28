@@ -9,7 +9,7 @@ import {
   renderWorkflowText,
   type WorkflowSnapshot,
 } from "./display.js";
-import { parseWorkflowScript, runWorkflow } from "./workflow.js";
+import { parseWorkflowScript, runWorkflow, type WorkflowRunResult } from "./workflow.js";
 
 const workflowToolSchema = Type.Object({
   script: Type.String({
@@ -20,7 +20,9 @@ const workflowToolSchema = Type.Object({
       "parallel() requires functions, not promises: await parallel(items.map(item => () => agent(...))).",
     ].join(" "),
   }),
-  args: Type.Optional(Type.Any({ description: "Optional JSON value exposed to the workflow script as global `args`." })),
+  args: Type.Optional(
+    Type.Any({ description: "Optional JSON value exposed to the workflow script as global `args`." }),
+  ),
 });
 
 export type WorkflowToolInput = {
@@ -41,7 +43,8 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
       "Execute a deterministic JavaScript workflow that orchestrates multiple subagents with agent(), parallel(), and pipeline().",
       "script is required raw JavaScript. It must start with export const meta = { name, description, phases? } and must call agent() at least once.",
     ].join(" "),
-    promptSnippet: "Run a deterministic JavaScript workflow. Required script header: export const meta = { name: 'short_snake_case', description: 'non-empty description', phases: [{ title: 'Phase' }] }.",
+    promptSnippet:
+      "Run a deterministic JavaScript workflow. Required script header: export const meta = { name: 'short_snake_case', description: 'non-empty description', phases: [{ title: 'Phase' }] }.",
     promptGuidelines: [
       "Use workflow only when the user explicitly asks for a workflow, workflows, fan-out, or multi-agent orchestration.",
       "For workflow, always pass one raw JavaScript string in the required script parameter; do not include Markdown fences or prose around the script.",
@@ -78,7 +81,7 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
         display.update(snapshot);
       };
 
-      let result;
+      let result: WorkflowRunResult;
       try {
         result = await runWorkflow(script, {
           cwd: options.cwd ?? ctx.cwd,
@@ -106,7 +109,9 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
             update();
           },
           onAgentEnd(event) {
-            const agent = [...snapshot.agents].reverse().find((item) => item.label === event.label && item.status === "running");
+            const agent = [...snapshot.agents]
+              .reverse()
+              .find((item) => item.label === event.label && item.status === "running");
             if (agent) {
               agent.status = event.result === null ? "error" : "done";
               agent.resultPreview = preview(event.result);
@@ -130,7 +135,9 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
       }
 
       if (result.agentCount === 0) {
-        throw new Error("workflow scripts must call agent() at least once; this workflow declared phases but did not run any subagents");
+        throw new Error(
+          "workflow scripts must call agent() at least once; this workflow declared phases but did not run any subagents",
+        );
       }
 
       snapshot.result = result.result;
@@ -139,7 +146,12 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
       display.complete(snapshot);
 
       return {
-        content: [{ type: "text", text: `Workflow ${result.meta.name} completed with ${result.agentCount} agent(s).\n\nResult:\n${JSON.stringify(result.result, null, 2)}` }],
+        content: [
+          {
+            type: "text",
+            text: `Workflow ${result.meta.name} completed with ${result.agentCount} agent(s).\n\nResult:\n${JSON.stringify(result.result, null, 2)}`,
+          },
+        ],
         details: {
           ...snapshot,
           meta: result.meta,

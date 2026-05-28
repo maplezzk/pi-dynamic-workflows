@@ -1,13 +1,13 @@
+import type { AssistantMessage, TextContent } from "@mariozechner/pi-ai";
 import {
+  type CreateAgentSessionOptions,
   createAgentSession,
   createCodingTools,
   getAgentDir,
   SessionManager,
   SettingsManager,
-  type CreateAgentSessionOptions,
   type ToolDefinition,
 } from "@mariozechner/pi-coding-agent";
-import type { AssistantMessage, TextContent } from "@mariozechner/pi-ai";
 import type { Static, TSchema } from "typebox";
 import { createStructuredOutputTool, type StructuredOutputCapture } from "./structured-output.js";
 

@@ -11,14 +11,24 @@
     }
   },
   "scripts": {
-    "test": "npm run build && npm run test:unit",
+    "test": "npm run check && npm run build && npm run test:unit",
     "test:unit": "tsx --test tests/**/*.test.ts",
+    "check": "biome check .",
+    "format": "biome format --write .",
+    "lint": "biome lint .",
     "build": "tsc",
     "dev": "tsx src/index.ts"
   },
-  "keywords": ["pi-package", "pi", "workflow", "agents"],
+  "keywords": [
+    "pi-package",
+    "pi",
+    "workflow",
+    "agents"
+  ],
   "pi": {
-    "extensions": ["extensions/workflow.ts"]
+    "extensions": [
+      "extensions/workflow.ts"
+    ]
   },
   "author": "",
   "license": "ISC",
@@ -29,6 +39,7 @@
     "typebox": "latest"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.4.16",
     "tsx": "latest",
     "typescript": "latest"
   }

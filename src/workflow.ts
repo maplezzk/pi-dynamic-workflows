@@ -1,6 +1,6 @@
 import vm from "node:vm";
-import { parse } from "acorn";
 import type { Node } from "acorn";
+import { parse } from "acorn";
 import type { TSchema } from "typebox";
 import { WorkflowAgent, type WorkflowAgentOptions } from "./agent.js";
 
@@ -59,12 +59,18 @@ type AnyNode = Node & { [key: string]: any; start: number; end: number };
 
 const DETERMINISM_BLOCKLIST = /\bDate\s*\.\s*now\b|\bMath\s*\.\s*random\b|\bnew\s+Date\s*\(\s*\)/;
 
-export async function runWorkflow<T = unknown>(script: string, options: WorkflowRunOptions = {}): Promise<WorkflowRunResult<T>> {
+export async function runWorkflow<T = unknown>(
+  script: string,
+  options: WorkflowRunOptions = {},
+): Promise<WorkflowRunResult<T>> {
   const started = Date.now();
   const { meta, body } = parseWorkflowScript(script);
   const state: RuntimeState = { logs: [], phases: [], agentCount: 0, spent: 0 };
   const agentRunner = options.agent ?? new WorkflowAgent(options);
-  const concurrency = Math.max(1, Math.min(options.concurrency ?? Math.max(1, (globalThis.navigator?.hardwareConcurrency ?? 8) - 2), 16));
+  const concurrency = Math.max(
+    1,
+    Math.min(options.concurrency ?? Math.max(1, (globalThis.navigator?.hardwareConcurrency ?? 8) - 2), 16),
+  );
   const limiter = createLimiter(concurrency);
 
   const log = (message: string) => {
@@ -125,38 +131,45 @@ export async function runWorkflow<T = unknown>(script: string, options: Workflow
     if (thunks.some((thunk) => typeof thunk !== "function")) {
       throw new TypeError("parallel() expects an array of functions, not promises. Wrap each call: () => agent(...)");
     }
-    return Promise.all(thunks.map(async (thunk, index) => {
-      try {
-        return await thunk();
-      } catch (error) {
-        if (options.signal?.aborted) throw error;
-        log(`parallel[${index}] failed: ${error instanceof Error ? error.message : String(error)}`);
-        return null;
-      }
-    }));
+    return Promise.all(
+      thunks.map(async (thunk, index) => {
+        try {
+          return await thunk();
+        } catch (error) {
+          if (options.signal?.aborted) throw error;
+          log(`parallel[${index}] failed: ${error instanceof Error ? error.message : String(error)}`);
+          return null;
+        }
+      }),
+    );
   };
 
-  const pipeline = async (items: unknown[], ...stages: Array<(prev: unknown, original: unknown, index: number) => unknown>) => {
+  const pipeline = async (
+    items: unknown[],
+    ...stages: Array<(prev: unknown, original: unknown, index: number) => unknown>
+  ) => {
     throwIfAborted();
     if (!Array.isArray(items)) throw new TypeError("pipeline() expects an array as the first argument");
     if (stages.some((stage) => typeof stage !== "function")) {
       throw new TypeError("pipeline() stages must be functions: pipeline(items, item => ..., result => ...)");
     }
-    return Promise.all(items.map(async (item, index) => {
-      let value: unknown = item;
-      for (const stage of stages) {
-        try {
-          throwIfAborted();
-          value = await stage(value, item, index);
-          throwIfAborted();
-        } catch (error) {
-          if (options.signal?.aborted) throw error;
-          log(`pipeline[${index}] failed: ${error instanceof Error ? error.message : String(error)}`);
-          return null;
+    return Promise.all(
+      items.map(async (item, index) => {
+        let value: unknown = item;
+        for (const stage of stages) {
+          try {
+            throwIfAborted();
+            value = await stage(value, item, index);
+            throwIfAborted();
+          } catch (error) {
+            if (options.signal?.aborted) throw error;
+            log(`pipeline[${index}] failed: ${error instanceof Error ? error.message : String(error)}`);
+            return null;
+          }
         }
-      }
-      return value;
-    }));
+        return value;
+      }),
+    );
   };
 
   const context = vm.createContext({
@@ -169,7 +182,12 @@ export async function runWorkflow<T = unknown>(script: string, options: Workflow
     cwd: options.cwd ?? process.cwd(),
     process: Object.freeze({ cwd: () => options.cwd ?? process.cwd() }),
     budget,
-    console: { log, info: log, warn: (m: unknown) => log(`[warn] ${String(m)}`), error: (m: unknown) => log(`[error] ${String(m)}`) },
+    console: {
+      log,
+      info: log,
+      warn: (m: unknown) => log(`[warn] ${String(m)}`),
+      error: (m: unknown) => log(`[error] ${String(m)}`),
+    },
     JSON,
     Math,
     Array,
@@ -184,7 +202,14 @@ export async function runWorkflow<T = unknown>(script: string, options: Workflow
 
   const wrapped = `(async () => {\n${body}\n})()`;
   const result = await new vm.Script(wrapped, { filename: `${meta.name || "workflow"}.js` }).runInContext(context);
-  return { meta, result: result as T, logs: state.logs, phases: state.phases, agentCount: state.agentCount, durationMs: Date.now() - started };
+  return {
+    meta,
+    result: result as T,
+    logs: state.logs,
+    phases: state.phases,
+    agentCount: state.agentCount,
+    durationMs: Date.now() - started,
+  };
 }
 
 export function parseWorkflowScript(script: string): { meta: WorkflowMeta; body: string } {
@@ -201,12 +226,12 @@ export function parseWorkflowScript(script: string): { meta: WorkflowMeta; body:
   }) as AnyNode;
 
   const first = ast.body?.[0] as AnyNode | undefined;
-  if (!first || first.type !== "ExportNamedDeclaration") {
+  if (first?.type !== "ExportNamedDeclaration") {
     throw new Error("`export const meta = { name, description, phases }` must be the first statement in the script");
   }
 
   const declaration = first.declaration as AnyNode | null;
-  if (!declaration || declaration.type !== "VariableDeclaration" || declaration.kind !== "const") {
+  if (declaration?.type !== "VariableDeclaration" || declaration.kind !== "const") {
     throw new Error("meta export must be `export const meta = ...`");
   }
   if (declaration.declarations.length !== 1) {
@@ -268,7 +293,8 @@ function evaluateLiteral(node: AnyNode, path: string): unknown {
 
 function propertyKey(node: AnyNode, path: string): string {
   if (node.type === "Identifier") return node.name;
-  if (node.type === "Literal" && (typeof node.value === "string" || typeof node.value === "number")) return String(node.value);
+  if (node.type === "Literal" && (typeof node.value === "string" || typeof node.value === "number"))
+    return String(node.value);
   throw new Error(`unsupported key type in ${path}: ${node.type}`);
 }
 
@@ -276,8 +302,10 @@ function validateMeta(meta: unknown): asserts meta is WorkflowMeta {
   if (!meta || typeof meta !== "object") throw new Error("meta must be an object");
   const value = meta as WorkflowMeta;
   if (typeof value.name !== "string" || !value.name.trim()) throw new Error("meta.name must be a non-empty string");
-  if (typeof value.description !== "string" || !value.description.trim()) throw new Error("meta.description must be a non-empty string");
-  if (value.whenToUse !== undefined && typeof value.whenToUse !== "string") throw new Error("meta.whenToUse must be a string");
+  if (typeof value.description !== "string" || !value.description.trim())
+    throw new Error("meta.description must be a non-empty string");
+  if (value.whenToUse !== undefined && typeof value.whenToUse !== "string")
+    throw new Error("meta.whenToUse must be a string");
   if (value.phases !== undefined) {
     if (!Array.isArray(value.phases)) throw new Error("meta.phases must be an array");
     for (const phase of value.phases) {

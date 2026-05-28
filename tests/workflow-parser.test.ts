@@ -87,7 +87,7 @@ test("parseWorkflowScript rejects array hazards", () => {
 
 test("parseWorkflowScript rejects template interpolation", () => {
   assert.throws(
-    () => parseWorkflowScript("export const meta = { name: `demo_${id}`, description: 'desc' }"),
+    () => parseWorkflowScript("export const meta = { name: `demo_$" + "{id}`, description: 'desc' }"),
     /template interpolation not allowed/,
   );
 });
