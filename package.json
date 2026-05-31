@@ -47,14 +47,16 @@
     "acorn": "^8.16.0"
   },
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": "*",
-    "@mariozechner/pi-tui": "*",
+    "@earendil-works/pi-ai": "^0.78.0",
+    "@earendil-works/pi-coding-agent": "^0.78.0",
+    "@earendil-works/pi-tui": "^0.78.0",
     "typebox": "*"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
-    "@mariozechner/pi-coding-agent": "latest",
-    "@mariozechner/pi-tui": "latest",
+    "@earendil-works/pi-ai": "0.78.0",
+    "@earendil-works/pi-coding-agent": "0.78.0",
+    "@earendil-works/pi-tui": "0.78.0",
     "tsx": "latest",
     "typebox": "latest",
     "typescript": "latest"
