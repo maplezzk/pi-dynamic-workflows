@@ -1,7 +1,7 @@
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   createToolUpdateWorkflowDisplay,
@@ -14,21 +14,29 @@ import {
 import { parseWorkflowScript, runWorkflow, type WorkflowRunResult } from "./workflow.js";
 
 const workflowToolSchema = Type.Object({
-  script: Type.String({
-    description: [
-      "Required raw JavaScript workflow script, with no Markdown fences.",
-      "First statement: export const meta = { name: 'short_snake_case', description: 'non-empty description' }. meta.phases is optional documentation; live progress is driven by phase(title).",
-      "Use phase('Name'), agent(prompt, opts), parallel(arrayOfFunctions), pipeline(items, ...stages), log(message), args, and budget. The workflow must call agent() at least once.",
-      "parallel() requires functions, not promises: await parallel(items.map(item => () => agent(...))).",
-    ].join(" "),
-  }),
+  script: Type.Optional(
+    Type.String({
+      description: [
+        "Raw JavaScript workflow script, with no Markdown fences.",
+        "First statement: export const meta = { name: 'short_snake_case', description: 'non-empty description' }.",
+        "Use phase('Name'), agent(prompt, opts), parallel(arrayOfFunctions), pipeline(items, ...stages), log(message), args, and budget.",
+        "parallel() requires functions, not promises: await parallel(items.map(item => () => agent(...))).",
+      ].join(" "),
+    }),
+  ),
+  file: Type.Optional(
+    Type.String({
+      description: "Absolute or relative path to a .js workflow file. Reads the file and executes it as the workflow script.",
+    }),
+  ),
   args: Type.Optional(
     Type.Any({ description: "Optional JSON value exposed to the workflow script as global `args`." }),
   ),
 });
 
 export type WorkflowToolInput = {
-  script: string;
+  script?: string;
+  file?: string;
   args?: unknown;
 };
 
@@ -37,7 +45,7 @@ const workflowDisplayOptions = {
   streamToolUpdates: true,
   maxAgents: 4,
   maxLogs: 1,
-  showResultPreviews: false,
+  showResultPreviews: true,
 } as const;
 
 export interface WorkflowToolOptions {
@@ -76,7 +84,17 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
       return normalizeWorkflowToolArgs(args);
     },
     async execute(_toolCallId, params, signal, onUpdate, ctx) {
-      const script = normalizeWorkflowScript(params.script);
+      // 从 file 或 script 获取脚本内容
+      let rawScript: string;
+      if (params.file) {
+        const filePath = params.file.startsWith("/") ? params.file : join(ctx.cwd ?? "/", params.file);
+        rawScript = readFileSync(filePath, "utf8");
+      } else if (params.script) {
+        rawScript = params.script;
+      } else {
+        throw new Error("workflow requires either a `script` (JavaScript string) or `file` (path to .js file) argument");
+      }
+      const script = normalizeWorkflowScript(rawScript);
       const parsed = parseWorkflowScript(script);
       let snapshot: WorkflowSnapshot = createWorkflowSnapshot(parsed.meta);
       const display = createToolUpdateWorkflowDisplay(onUpdate, undefined, workflowDisplayOptions);
@@ -134,7 +152,16 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
               .find((item) => item.label === event.label && item.status === "running");
             if (agent) {
               agent.status = event.result === null ? "error" : "done";
-              agent.resultPreview = preview(event.result);
+              // 写入子 agent 结果文件
+              if (event.result !== null) {
+                const cwd = options.cwd ?? ctx.cwd;
+                const agentsDir = join(cwd, ".pi", "workflows", parsed.meta.name, "agents");
+                mkdirSync(agentsDir, { recursive: true });
+                const safeLabel = agent.label.replace(/[/\\:*?"<>|\s]+/g, "_").slice(0, 32);
+                const agentFile = join(agentsDir, `${String(agent.id).padStart(2, "0")}-${safeLabel}.json`);
+                writeFileSync(agentFile, JSON.stringify(event.result, null, 2), "utf8");
+                agent.resultPreview = `📄 ${agentFile}`;
+              }
             }
             update();
           },
@@ -208,10 +235,11 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
 }
 
 function normalizeWorkflowToolArgs(args: unknown): WorkflowToolInput {
-  if (!args || typeof args !== "object") throw new Error("workflow requires an object argument with a script string");
+  if (!args || typeof args !== "object") throw new Error("workflow requires an object argument with a script or file parameter");
   const value = args as Record<string, unknown>;
-  if (typeof value.script !== "string") throw new Error("workflow requires `script` to be a string");
-  return { ...value, script: normalizeWorkflowScript(value.script) } as WorkflowToolInput;
+  if (typeof value.file !== "string" && typeof value.script !== "string")
+    throw new Error("workflow requires `script` (JavaScript string) or `file` (path to .js file)");
+  return value as WorkflowToolInput;
 }
 
 function normalizeWorkflowScript(script: string): string {

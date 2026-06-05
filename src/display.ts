@@ -187,14 +187,10 @@ export function renderWorkflowLines(snapshot: WorkflowSnapshot, options: Workflo
     for (const log of visibleLogs) lines.push(`  log: ${log}`);
   }
 
-  // 附加结果文件路径到最后一个 agent 行
+  // 附加最终结果文件路径
   if (snapshot.resultFile && snapshot.runningCount === 0) {
-    for (let i = lines.length - 1; i >= 0; i--) {
-      if (lines[i].match(/^    #\d+ /)) {
-        lines[i] = `${lines[i]} → 结果文件：${snapshot.resultFile}`;
-        break;
-      }
-    }
+    if (lines.length > 0) lines.push("");
+    lines.push(`  📄 总结果：${snapshot.resultFile}`);
   }
 
   return lines;
