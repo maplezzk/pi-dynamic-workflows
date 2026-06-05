@@ -3,6 +3,9 @@ import type { Node } from "acorn";
 import { parse } from "acorn";
 import type { TSchema } from "typebox";
 import { WorkflowAgent, type WorkflowAgentOptions } from "./agent.js";
+import { SubagentWorkflowAgent, type SubagentWorkflowAgentOptions } from "./subagent-agent.js";
+
+const USE_SUBAGENT_BACKEND = process.env.PI_WORKFLOW_BACKEND === "subagent";
 
 export interface WorkflowMetaPhase {
   title: string;
@@ -19,7 +22,7 @@ export interface WorkflowMeta {
 
 export interface WorkflowRunOptions extends WorkflowAgentOptions {
   args?: unknown;
-  agent?: Pick<WorkflowAgent, "run">;
+  agent?: { run(prompt: string, options: Record<string, unknown>): Promise<unknown> };
   concurrency?: number;
   tokenBudget?: number | null;
   signal?: AbortSignal;
@@ -27,6 +30,8 @@ export interface WorkflowRunOptions extends WorkflowAgentOptions {
   onPhase?: (title: string) => void;
   onAgentStart?: (event: { label: string; phase?: string; prompt: string }) => void;
   onAgentEnd?: (event: { label: string; phase?: string; result: unknown }) => void;
+  /** When using subagent backend, the pi extension context from tool execute. */
+  subagent?: SubagentWorkflowAgentOptions;
 }
 
 export interface WorkflowRunResult<T = unknown> {
@@ -67,7 +72,11 @@ export async function runWorkflow<T = unknown>(
   const started = Date.now();
   const { meta, body } = parseWorkflowScript(script);
   const state: RuntimeState = { logs: [], phases: [], agentCount: 0, spent: 0 };
-  const agentRunner = options.agent ?? new WorkflowAgent(options);
+  const agentRunner =
+    options.agent ??
+    (USE_SUBAGENT_BACKEND && options.subagent
+      ? new SubagentWorkflowAgent(options.subagent)
+      : new WorkflowAgent(options));
   const concurrency = Math.max(
     1,
     Math.min(options.concurrency ?? Math.max(1, (globalThis.navigator?.hardwareConcurrency ?? 8) - 2), 16),

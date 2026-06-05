@@ -18,6 +18,8 @@ export {
 } from "./display.js";
 export type { StructuredOutputCapture, StructuredOutputToolOptions } from "./structured-output.js";
 export { createStructuredOutputTool } from "./structured-output.js";
+export type { SubagentWorkflowAgentOptions } from "./subagent-agent.js";
+export { SubagentWorkflowAgent } from "./subagent-agent.js";
 export type {
   AgentOptions,
   WorkflowMeta,

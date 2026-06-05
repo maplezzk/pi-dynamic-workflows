@@ -1,6 +1,8 @@
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { writeFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 import {
   createToolUpdateWorkflowDisplay,
   createWorkflowSnapshot,
@@ -100,6 +102,11 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
             modelRegistry: ctx.modelRegistry,
             model: ctx.model,
           },
+          subagent: {
+            launchCtx: ctx as any,
+            model: typeof ctx.model === "string" ? ctx.model : ((ctx.model as any)?.id ?? String(ctx.model ?? "")),
+            cwd: options.cwd ?? ctx.cwd,
+          },
           onLog(message) {
             snapshot.logs.push(message);
             update();
@@ -158,11 +165,21 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
       snapshot = recomputeWorkflowSnapshot(snapshot);
       display.complete(snapshot);
 
+      // 写入结果文件
+      const cwd = options.cwd ?? ctx.cwd;
+      const outDir = join(cwd, ".pi", "workflows");
+      mkdirSync(outDir, { recursive: true });
+      const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      const outFile = join(outDir, `${result.meta.name}-${ts}.json`);
+      writeFileSync(outFile, JSON.stringify(result.result, null, 2), "utf8");
+
+      snapshot.resultFile = outFile; // 渲染用
+
       return {
         content: [
           {
             type: "text",
-            text: `Workflow ${result.meta.name} completed with ${result.agentCount} agent(s).\n\nResult:\n${JSON.stringify(result.result, null, 2)}`,
+            text: `Workflow ${result.meta.name} completed with ${result.agentCount} agent(s) in ${result.durationMs}ms.\n结果已写入: ${outFile}`,
           },
         ],
         details: {
@@ -171,6 +188,7 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
           phases: result.phases,
           logs: result.logs,
           result: result.result,
+          resultFile: outFile,
           durationMs: result.durationMs,
         },
       };

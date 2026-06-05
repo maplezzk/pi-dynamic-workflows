@@ -26,6 +26,7 @@ export interface WorkflowSnapshot {
   errorCount: number;
   durationMs?: number;
   result?: unknown;
+  resultFile?: string;
 }
 
 export interface WorkflowDisplay {
@@ -185,6 +186,17 @@ export function renderWorkflowLines(snapshot: WorkflowSnapshot, options: Workflo
     if (lines.length > 1) lines.push("");
     for (const log of visibleLogs) lines.push(`  log: ${log}`);
   }
+
+  // 附加结果文件路径到最后一个 agent 行
+  if (snapshot.resultFile && snapshot.runningCount === 0) {
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (lines[i].match(/^    #\d+ /)) {
+        lines[i] = `${lines[i]} → 结果文件：${snapshot.resultFile}`;
+        break;
+      }
+    }
+  }
+
   return lines;
 }
 
@@ -228,7 +240,7 @@ function shorten(value: string, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
-export function preview(value: unknown, max = 80): string {
+export function preview(value: unknown, max = 200): string {
   const text = typeof value === "string" ? value : JSON.stringify(value);
   if (!text) return "";
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
