@@ -29,6 +29,7 @@ export interface WorkflowSnapshot {
   durationMs?: number;
   result?: unknown;
   resultFile?: string;
+  startedAt?: number;
 }
 
 export interface WorkflowDisplay {
@@ -449,7 +450,8 @@ export function renderWorkflowWidgetLines(snapshot: WorkflowSnapshot, width: num
       (code >= 0xffe0 && code <= 0xffe6) ||
       (code >= 0x20000 && code <= 0x2fffd) ||
       (code >= 0x30000 && code <= 0x3fffd)
-    ) return 2;
+    )
+      return 2;
     return 1;
   };
 
@@ -521,14 +523,19 @@ export function renderWorkflowWidgetLines(snapshot: WorkflowSnapshot, width: num
       const elapsedText = agentElapsed ? formatElapsed(agentElapsed) : "";
 
       // 右侧状态文字 + 耗时
-      const statusLabel = agent.status === "done" ? "done"
-        : agent.status === "running" ? "running"
-        : agent.status === "error" ? "error"
-        : "";
+      const statusLabel =
+        agent.status === "done"
+          ? "done"
+          : agent.status === "running"
+            ? "running"
+            : agent.status === "error"
+              ? "error"
+              : "";
       const rightText = elapsedText ? `${statusLabel} ${elapsedText}` : statusLabel;
       const leftPart = `    ${order} ${icon} ${label}`;
       const leftRawLen = 4 + order.length + 1 + 1 + 1 + strWidth(label);
-      const statusColor = agent.status === "done" ? GREEN : agent.status === "running" ? CYAN : agent.status === "error" ? RED : DIM;
+      const statusColor =
+        agent.status === "done" ? GREEN : agent.status === "running" ? CYAN : agent.status === "error" ? RED : DIM;
       const rightPart = rightText ? `${statusColor}${rightText}${RST}` : "";
       const rightRawLen = rightText.length;
 
@@ -554,14 +561,19 @@ export function renderWorkflowWidgetLines(snapshot: WorkflowSnapshot, width: num
       const agentElapsed = computeAgentDuration(agent);
       const elapsedText = agentElapsed ? formatElapsed(agentElapsed) : "";
 
-      const statusLabel = agent.status === "done" ? "done"
-        : agent.status === "running" ? "running"
-        : agent.status === "error" ? "error"
-        : "";
+      const statusLabel =
+        agent.status === "done"
+          ? "done"
+          : agent.status === "running"
+            ? "running"
+            : agent.status === "error"
+              ? "error"
+              : "";
       const rightText = elapsedText ? `${statusLabel} ${elapsedText}` : statusLabel;
       const leftPart = `    ${order} ${icon} ${label}`;
       const leftRawLen = 4 + order.length + 1 + 1 + 1 + strWidth(label);
-      const statusColor = agent.status === "done" ? GREEN : agent.status === "running" ? CYAN : agent.status === "error" ? RED : DIM;
+      const statusColor =
+        agent.status === "done" ? GREEN : agent.status === "running" ? CYAN : agent.status === "error" ? RED : DIM;
       const rightPart = rightText ? `${statusColor}${rightText}${RST}` : "";
       const rightRawLen = rightText.length;
 

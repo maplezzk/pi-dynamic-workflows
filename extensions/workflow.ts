@@ -1,14 +1,70 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { createWorkflowTool } from "../src/index.js";
+import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
+import { Type } from "typebox";
+import { cancelRunningWorkflow, createWorkflowTool, renderWorkflowThemed } from "../src/index.js";
 
 export default function extension(pi: ExtensionAPI) {
   const workflowTool = createWorkflowTool({ pi });
   pi.registerTool(workflowTool);
 
+  // 异步模式：注册 workflow_cancel 工具
+  if (process.env.PI_WORKFLOW_ASYNC === "true") {
+    const cancelTool = defineTool({
+      name: "workflow_cancel",
+      label: "Cancel Workflow",
+      description: "取消正在后台运行的 workflow",
+      promptSnippet: "Cancel a running background workflow.",
+      parameters: Type.Object({}),
+      async execute() {
+        const result = cancelRunningWorkflow();
+        if (result.cancelled) {
+          return {
+            content: [{ type: "text", text: `Workflow ${result.name} 取消请求已发送` }],
+          };
+        }
+        return {
+          content: [{ type: "text", text: "当前没有正在运行的 workflow" }],
+        };
+      },
+      renderCall(_args, theme) {
+        return new Text(theme.fg("toolTitle", theme.bold("workflow_cancel")), 0, 0);
+      },
+    });
+    pi.registerTool(cancelTool);
+  }
+
+  // 注册异步模式的结果消息渲染器
+  pi.registerMessageRenderer("workflow_result", (message: any, _options: any, theme: any) => {
+    const snapshot = message.details;
+    if (snapshot?.name) {
+      return new Text(
+        renderWorkflowThemed(snapshot, theme, {
+          key: "workflow",
+          streamToolUpdates: true,
+          maxAgents: 4,
+          maxLogs: 1,
+          showResultPreviews: true,
+        }),
+        0,
+        0,
+      );
+    }
+    return new Text(message.content || "workflow completed", 0, 0);
+  });
+
   pi.on("session_start", () => {
     const active = pi.getActiveTools();
-    if (!active.includes(workflowTool.name)) {
-      pi.setActiveTools([...active, workflowTool.name]);
+    const toolNames = [workflowTool.name];
+    if (process.env.PI_WORKFLOW_ASYNC === "true") toolNames.push("workflow_cancel");
+    for (const name of toolNames) {
+      if (!active.includes(name)) {
+        pi.setActiveTools([...pi.getActiveTools(), name]);
+      }
     }
+  });
+
+  // 会话关闭时取消运行中的异步 workflow
+  pi.on("session_shutdown", () => {
+    cancelRunningWorkflow();
   });
 }

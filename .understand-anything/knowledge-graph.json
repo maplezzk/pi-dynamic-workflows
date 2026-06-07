@@ -1,0 +1,518 @@
+{
+  "version": "1.0.0",
+  "project": {
+    "name": "pi-dynamic-workflows",
+    "languages": ["TypeScript"],
+    "frameworks": ["Pi Extensions Framework", "acorn"],
+    "description": "Claude-Code-style dynamic workflow orchestration for Pi — 通过 JavaScript 脚本编排多子Agent并行工作流，支持 agent/parallel/pipeline 三种并发模式",
+    "analyzedAt": "2026-06-05T11:06:00Z",
+    "gitCommitHash": "31b2aca0f1cb195aafbfc5e3ee2b8c83ad3f21a2"
+  },
+  "nodes": [
+    {
+      "id": "file:src/index.ts",
+      "type": "file",
+      "name": "index.ts — 公共 API 导出入口",
+      "filePath": "src/index.ts",
+      "summary": "统一导出所有公共 API：WorkflowAgent、createWorkflowTool、parseWorkflowScript、runWorkflow、createStructuredOutputTool、显示模块等。作为包的主入口（package.json main 字段指向 dist/index.js）。",
+      "tags": ["barrel", "public-api", "entry-point"],
+      "complexity": "simple",
+      "languageNotes": "纯 re-export，无业务逻辑"
+    },
+    {
+      "id": "file:src/workflow.ts",
+      "type": "file",
+      "name": "workflow.ts — 核心工作流引擎",
+      "filePath": "src/workflow.ts",
+      "summary": "核心引擎文件，包含两个关键导出：parseWorkflowScript() 使用 acorn AST 解析工作流脚本并提取字面量元数据（含确定性验证）；runWorkflow() 在 Node vm 沙箱中执行脚本，注入 agent/parallel/pipeline/phase/log/budget 等全局函数，管理并发限制和生命周期。",
+      "tags": ["core", "engine", "sandbox", "ast-parser"],
+      "complexity": "complex",
+      "languageNotes": "依赖 acorn 做 AST 解析，内部实现了完整的确定性 AST 遍历器，拦截 Date.now()/Math.random()/new Date() 等非确定性 API"
+    },
+    {
+      "id": "file:src/workflow-tool.ts",
+      "type": "file",
+      "name": "workflow-tool.ts — Pi Tool 注册与渲染",
+      "filePath": "src/workflow-tool.ts",
+      "summary": "定义 workflow 工具的 schema（TypeBox 验证）、prompt 指南、参数规范化和执行流程。创建 createWorkflowTool()，集成 runWorkflow 与实时进度显示（onAgentStart/onAgentEnd 回调驱动快照更新）。",
+      "tags": ["tool", "registration", "display", "pi-integration"],
+      "complexity": "moderate",
+      "languageNotes": "使用 TypeBox 定义 input schema，defineTool() 注册到 Pi 工具系统"
+    },
+    {
+      "id": "file:src/agent.ts",
+      "type": "file",
+      "name": "agent.ts — 子 Agent 运行器",
+      "filePath": "src/agent.ts",
+      "summary": "WorkflowAgent 类：封装 Pi 的 createAgentSession，为每个子 agent 创建内存会话。支持结构化输出（注入结构化输出工具）、信号取消、自定义工具注入。run() 方法执行 prompt 并返回文本或验证后的 JSON 对象。",
+      "tags": ["agent", "session", "structured-output", "runner"],
+      "complexity": "moderate",
+      "languageNotes": "依赖 @earendil-works/pi-coding-agent 的 createAgentSession、SessionManager.inMemory"
+    },
+    {
+      "id": "file:src/structured-output.ts",
+      "type": "file",
+      "name": "structured-output.ts — 结构化输出工具",
+      "filePath": "src/structured-output.ts",
+      "summary": "创建终止式工具：当子 agent 调用时触发 terminate: true，捕获验证后的 params 作为子 agent 的返回值。避免额外一轮 assistant 对话，节省 token。",
+      "tags": ["tool", "structured-output", "terminate", "schema"],
+      "complexity": "simple",
+      "languageNotes": "使用 TypeBox schema 验证，capture 对象承载返回值"
+    },
+    {
+      "id": "file:src/display.ts",
+      "type": "file",
+      "name": "display.ts — 进度展示与快照",
+      "filePath": "src/display.ts",
+      "summary": "定义 WorkflowSnapshot 数据结构及全套渲染逻辑：createWorkflowSnapshot() 初始化快照、recomputeWorkflowSnapshot() 重新计算统计、renderWorkflowLines() 生成 UI 行数组（按 phase 分组）、renderWorkflowText() 生成纯文本。",
+      "tags": ["display", "snapshot", "render", "progress"],
+      "complexity": "moderate",
+      "languageNotes": "支持 tool update 和 widget 两种显示模式"
+    },
+    {
+      "id": "file:extensions/workflow.ts",
+      "type": "file",
+      "name": "workflow.ts — Pi 扩展入口点",
+      "filePath": "extensions/workflow.ts",
+      "summary": "Pi 扩展入口：默认导出 extension() 函数，注册 workflow 工具并在 session_start 事件中自动激活该工具。由 package.json 的 pi.extensions 字段指向。",
+      "tags": ["extension", "entry-point", "bootstrap"],
+      "complexity": "simple",
+      "languageNotes": "极简实现，仅 registerTool + setActiveTools"
+    },
+    {
+      "id": "file:types/workflow.d.ts",
+      "type": "file",
+      "name": "workflow.d.ts — 全局类型声明",
+      "filePath": "types/workflow.d.ts",
+      "summary": "为工作流脚本提供编辑器 IntelliSense 的类型声明文件。声明全局可用的 agent、parallel、pipeline、phase、log、args、cwd、budget 等函数和变量类型。",
+      "tags": ["types", "intellisense", "ambient-declarations"],
+      "complexity": "simple",
+      "languageNotes": "ambient 声明，通过 /// <reference types=\"pi-dynamic-workflows/workflow\" /> 引用"
+    },
+    {
+      "id": "file:tests/workflow-parser.test.ts",
+      "type": "file",
+      "name": "workflow-parser.test.ts — 解析器测试",
+      "filePath": "tests/workflow-parser.test.ts",
+      "summary": "测试 parseWorkflowScript 的各种场景：合法元数据、模板字面量、拒绝非字面量 meta、拒绝对象/数组危险模式（spread/computed keys）、拒绝非确定性 API、允许注释和字符串中提及 API 名。",
+      "tags": ["test", "parser", "validation"],
+      "complexity": "simple",
+      "languageNotes": "node:test + node:assert"
+    },
+    {
+      "id": "file:tests/workflow-runtime.test.ts",
+      "type": "file",
+      "name": "workflow-runtime.test.ts — 运行时测试",
+      "filePath": "tests/workflow-runtime.test.ts",
+      "summary": "测试 runWorkflow 运行行为：动态阶段记录、循环创建阶段、拒绝未 await 的 agent promise、拒绝非字符串阶段标题、允许提示词中提及非确定性 API 名。使用 fakeAgent 模拟子 agent。",
+      "tags": ["test", "runtime", "sandbox"],
+      "complexity": "simple",
+      "languageNotes": "node:test + node:assert"
+    },
+    {
+      "id": "file:tests/workflow-display.test.ts",
+      "type": "file",
+      "name": "workflow-display.test.ts — 显示模块测试",
+      "filePath": "tests/workflow-display.test.ts",
+      "summary": "测试显示模块：快照不预渲染声明式阶段、空阶段行隐藏、当前空阶段可见、按 phase 分组 agent、运行时创建阶段、日志限制截断。",
+      "tags": ["test", "display", "rendering"],
+      "complexity": "simple",
+      "languageNotes": "node:test + node:assert"
+    },
+    {
+      "id": "file:tests/workflow-tool.test.ts",
+      "type": "file",
+      "name": "workflow-tool.test.ts — 工具注册测试",
+      "filePath": "tests/workflow-tool.test.ts",
+      "summary": "验证 createWorkflowTool 生成的 prompt snippet 和 guidelines 正确性：不包含强制 phases、声明 phases 为可选元数据。",
+      "tags": ["test", "tool", "registration"],
+      "complexity": "simple",
+      "languageNotes": "node:test + node:assert"
+    },
+    {
+      "id": "config:package.json",
+      "type": "config",
+      "name": "package.json — 包配置",
+      "filePath": "package.json",
+      "summary": "npm 包清单：定义名称 pi-dynamic-workflows v1.0.1、ESM 模块、依赖 acorn、peer 依赖 pi 核心包、pi.extensions 指向 extensions/workflow.ts。",
+      "tags": ["config", "npm", "manifest"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:tsconfig.json",
+      "type": "config",
+      "name": "tsconfig.json — TypeScript 配置",
+      "filePath": "tsconfig.json",
+      "summary": "TypeScript 编译配置：target ES2022、module NodeNext、strict 模式、declaration 生成、rootDir src → outDir dist。",
+      "tags": ["config", "typescript", "compiler"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:biome.json",
+      "type": "config",
+      "name": "biome.json — 格式化/Lint 配置",
+      "filePath": "biome.json",
+      "summary": "Biome 代码质量配置：双引号、分号、尾逗号、120 行宽、推荐 lint 规则（noExplicitAny 关闭）。",
+      "tags": ["config", "formatter", "linter"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:.gitignore",
+      "type": "config",
+      "name": ".gitignore — Git 忽略规则",
+      "filePath": ".gitignore",
+      "summary": "忽略 node_modules/、dist/、.env、.DS_Store、*.log。",
+      "tags": ["config", "git"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:README.md",
+      "type": "document",
+      "name": "README.md — 项目文档",
+      "filePath": "README.md",
+      "summary": "完整项目文档：安装指南、使用示例、工作流脚本语法（agent/parallel/pipeline/phase）、全局变量参考、结构化输出、确定性规则、架构说明、库模块表。",
+      "tags": ["documentation", "readme", "guide"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/workflow.ts:parseWorkflowScript",
+      "type": "function",
+      "name": "parseWorkflowScript()",
+      "filePath": "src/workflow.ts",
+      "summary": "使用 acorn 解析脚本 AST，提取 export const meta 字面量值，执行确定性验证（拦截 Date.now/Math.random/new Date），返回 { meta, body }。",
+      "tags": ["parser", "ast", "validation", "determinism"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/workflow.ts:runWorkflow",
+      "type": "function",
+      "name": "runWorkflow()",
+      "filePath": "src/workflow.ts",
+      "summary": "在 vm.createContext 沙箱中执行工作流脚本，注入 agent/parallel/pipeline/phase/log/args/budget 等全局函数。管理并发限制器、中断信号、token 预算、agent 生命周期回调。",
+      "tags": ["runtime", "sandbox", "orchestrator"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src/workflow-tool.ts:createWorkflowTool",
+      "type": "function",
+      "name": "createWorkflowTool()",
+      "filePath": "src/workflow-tool.ts",
+      "summary": "创建 Pi workflow 工具定义：定义 TypeBox schema、prompt 指南、execute 函数（调用 runWorkflow 并实时更新进度快照）、renderCall/renderResult UI 渲染。",
+      "tags": ["tool", "factory", "pi-integration"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:src/agent.ts:WorkflowAgent",
+      "type": "class",
+      "name": "WorkflowAgent",
+      "filePath": "src/agent.ts",
+      "summary": "子 agent 运行器类：封装 Pi createAgentSession，管理内存会话生命周期。run() 方法执行 prompt，支持结构化输出 schema、信号取消、自定义工具注入。",
+      "tags": ["agent", "session", "runner"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/structured-output.ts:createStructuredOutputTool",
+      "type": "function",
+      "name": "createStructuredOutputTool()",
+      "filePath": "src/structured-output.ts",
+      "summary": "创建终止式结构化输出工具：子 agent 调用时触发 terminate: true，参数经 TypeBox 验证后写入 capture 对象。",
+      "tags": ["tool", "structured-output", "factory"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/display.ts:createWorkflowSnapshot",
+      "type": "function",
+      "name": "createWorkflowSnapshot()",
+      "filePath": "src/display.ts",
+      "summary": "根据 WorkflowMeta 创建初始空快照，包含 name/description 和空的 phases/logs/agents 数组。",
+      "tags": ["snapshot", "factory"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/display.ts:recomputeWorkflowSnapshot",
+      "type": "function",
+      "name": "recomputeWorkflowSnapshot()",
+      "filePath": "src/display.ts",
+      "summary": "重新计算快照统计：从 agents 数组推导 runningCount/doneCount/errorCount/agentCount。",
+      "tags": ["snapshot", "compute"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/display.ts:renderWorkflowLines",
+      "type": "function",
+      "name": "renderWorkflowLines()",
+      "filePath": "src/display.ts",
+      "summary": "将快照渲染为 UI 行数组：按 phase 分组显示 agent 状态（▶/✓/✗/-），支持 maxAgents/maxLogs 截断。",
+      "tags": ["render", "display", "ui"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    { "source": "file:src/index.ts", "target": "file:src/workflow.ts", "type": "imports", "weight": 0.7 },
+    { "source": "file:src/index.ts", "target": "file:src/agent.ts", "type": "imports", "weight": 0.7 },
+    { "source": "file:src/index.ts", "target": "file:src/display.ts", "type": "imports", "weight": 0.7 },
+    { "source": "file:src/index.ts", "target": "file:src/structured-output.ts", "type": "imports", "weight": 0.7 },
+    { "source": "file:src/index.ts", "target": "file:src/workflow-tool.ts", "type": "imports", "weight": 0.7 },
+    { "source": "file:src/workflow.ts", "target": "file:src/agent.ts", "type": "imports", "weight": 0.7 },
+    { "source": "file:src/workflow-tool.ts", "target": "file:src/display.ts", "type": "imports", "weight": 0.7 },
+    { "source": "file:src/workflow-tool.ts", "target": "file:src/workflow.ts", "type": "imports", "weight": 0.7 },
+    { "source": "file:src/agent.ts", "target": "file:src/structured-output.ts", "type": "imports", "weight": 0.7 },
+    { "source": "file:src/display.ts", "target": "file:src/workflow.ts", "type": "imports", "weight": 0.7 },
+    { "source": "file:extensions/workflow.ts", "target": "file:src/index.ts", "type": "imports", "weight": 0.7 },
+
+    {
+      "source": "file:tests/workflow-parser.test.ts",
+      "target": "file:src/workflow.ts",
+      "type": "tested_by",
+      "weight": 0.5
+    },
+    {
+      "source": "file:tests/workflow-runtime.test.ts",
+      "target": "file:src/workflow.ts",
+      "type": "tested_by",
+      "weight": 0.5
+    },
+    {
+      "source": "file:tests/workflow-display.test.ts",
+      "target": "file:src/display.ts",
+      "type": "tested_by",
+      "weight": 0.5
+    },
+    {
+      "source": "file:tests/workflow-tool.test.ts",
+      "target": "file:src/workflow-tool.ts",
+      "type": "tested_by",
+      "weight": 0.5
+    },
+
+    {
+      "source": "file:src/workflow.ts",
+      "target": "function:src/workflow.ts:parseWorkflowScript",
+      "type": "contains",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/workflow.ts",
+      "target": "function:src/workflow.ts:runWorkflow",
+      "type": "contains",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/workflow-tool.ts",
+      "target": "function:src/workflow-tool.ts:createWorkflowTool",
+      "type": "contains",
+      "weight": 1.0
+    },
+    { "source": "file:src/agent.ts", "target": "class:src/agent.ts:WorkflowAgent", "type": "contains", "weight": 1.0 },
+    {
+      "source": "file:src/structured-output.ts",
+      "target": "function:src/structured-output.ts:createStructuredOutputTool",
+      "type": "contains",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/display.ts",
+      "target": "function:src/display.ts:createWorkflowSnapshot",
+      "type": "contains",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/display.ts",
+      "target": "function:src/display.ts:recomputeWorkflowSnapshot",
+      "type": "contains",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/display.ts",
+      "target": "function:src/display.ts:renderWorkflowLines",
+      "type": "contains",
+      "weight": 1.0
+    },
+
+    {
+      "source": "function:src/workflow.ts:runWorkflow",
+      "target": "function:src/workflow.ts:parseWorkflowScript",
+      "type": "calls",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/workflow-tool.ts:createWorkflowTool",
+      "target": "function:src/workflow.ts:runWorkflow",
+      "type": "calls",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/workflow-tool.ts:createWorkflowTool",
+      "target": "function:src/workflow.ts:parseWorkflowScript",
+      "type": "calls",
+      "weight": 0.8
+    },
+    {
+      "source": "class:src/agent.ts:WorkflowAgent",
+      "target": "function:src/structured-output.ts:createStructuredOutputTool",
+      "type": "calls",
+      "weight": 0.8
+    },
+
+    { "source": "config:package.json", "target": "file:extensions/workflow.ts", "type": "configures", "weight": 0.6 },
+    { "source": "config:tsconfig.json", "target": "file:src/index.ts", "type": "configures", "weight": 0.6 },
+    { "source": "config:biome.json", "target": "file:src/index.ts", "type": "configures", "weight": 0.6 },
+    { "source": "document:README.md", "target": "file:src/workflow.ts", "type": "documents", "weight": 0.5 },
+    { "source": "document:README.md", "target": "file:extensions/workflow.ts", "type": "documents", "weight": 0.5 },
+
+    { "source": "file:types/workflow.d.ts", "target": "file:src/workflow.ts", "type": "related", "weight": 0.5 },
+
+    {
+      "source": "function:src/workflow.ts:runWorkflow",
+      "target": "class:src/agent.ts:WorkflowAgent",
+      "type": "depends_on",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/workflow-tool.ts:createWorkflowTool",
+      "target": "function:src/display.ts:createWorkflowSnapshot",
+      "type": "depends_on",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/workflow-tool.ts:createWorkflowTool",
+      "target": "function:src/display.ts:renderWorkflowLines",
+      "type": "depends_on",
+      "weight": 0.6
+    }
+  ],
+  "layers": [
+    {
+      "id": "layer:core-engine",
+      "name": "核心引擎",
+      "description": "工作流脚本解析、沙箱执行、并发编排 — 整个系统的核心逻辑",
+      "nodeIds": [
+        "file:src/workflow.ts",
+        "function:src/workflow.ts:parseWorkflowScript",
+        "function:src/workflow.ts:runWorkflow"
+      ]
+    },
+    {
+      "id": "layer:tool-layer",
+      "name": "工具与代理层",
+      "description": "Pi 工具注册、子 Agent 管理、结构化输出 — 连接核心引擎与 Pi 框架的中间层",
+      "nodeIds": [
+        "file:src/workflow-tool.ts",
+        "file:src/agent.ts",
+        "file:src/structured-output.ts",
+        "function:src/workflow-tool.ts:createWorkflowTool",
+        "class:src/agent.ts:WorkflowAgent",
+        "function:src/structured-output.ts:createStructuredOutputTool"
+      ]
+    },
+    {
+      "id": "layer:display",
+      "name": "展示层",
+      "description": "进度快照数据结构、UI 行渲染、纯文本/Widget 双模式展示",
+      "nodeIds": [
+        "file:src/display.ts",
+        "function:src/display.ts:createWorkflowSnapshot",
+        "function:src/display.ts:recomputeWorkflowSnapshot",
+        "function:src/display.ts:renderWorkflowLines"
+      ]
+    },
+    {
+      "id": "layer:extension-entry",
+      "name": "扩展入口",
+      "description": "Pi 扩展加载入口，注册工具并激活",
+      "nodeIds": ["file:extensions/workflow.ts"]
+    },
+    {
+      "id": "layer:public-api",
+      "name": "公共接口",
+      "description": "包的公共 API 表面（类型声明 + barrel 导出）",
+      "nodeIds": ["file:src/index.ts", "file:types/workflow.d.ts"]
+    },
+    {
+      "id": "layer:tests",
+      "name": "测试",
+      "description": "单元测试：解析器、运行时、显示、工具注册四个维度",
+      "nodeIds": [
+        "file:tests/workflow-parser.test.ts",
+        "file:tests/workflow-runtime.test.ts",
+        "file:tests/workflow-display.test.ts",
+        "file:tests/workflow-tool.test.ts"
+      ]
+    },
+    {
+      "id": "layer:config-docs",
+      "name": "配置与文档",
+      "description": "项目配置文件和用户文档",
+      "nodeIds": [
+        "config:package.json",
+        "config:tsconfig.json",
+        "config:biome.json",
+        "config:.gitignore",
+        "document:README.md"
+      ]
+    }
+  ],
+  "tour": [
+    {
+      "order": 1,
+      "title": "项目概览",
+      "description": "从 README 了解项目定位：Claude-Code 风格的动态工作流编排，通过 JavaScript 脚本将复杂任务分解为多个并行子 Agent。",
+      "nodeIds": ["document:README.md"]
+    },
+    {
+      "order": 2,
+      "title": "扩展入口 — 如何加载",
+      "description": "Pi 通过 package.json 的 pi.extensions 字段发现此扩展。extensions/workflow.ts 是唯一入口，注册 workflow 工具并在 session_start 时自动激活。",
+      "nodeIds": ["file:extensions/workflow.ts", "config:package.json"]
+    },
+    {
+      "order": 3,
+      "title": "公共 API 表面",
+      "description": "src/index.ts 是 barrel 导出文件，统一暴露所有公共类型和函数。types/workflow.d.ts 为工作流脚本编写者提供编辑器 IntelliSense。",
+      "nodeIds": ["file:src/index.ts", "file:types/workflow.d.ts"]
+    },
+    {
+      "order": 4,
+      "title": "工具注册 — Pi 集成",
+      "description": "createWorkflowTool() 定义 workflow 工具的 schema、prompt 指南和执行流程。它是连接用户自然语言请求与 JavaScript 工作流脚本的桥梁。",
+      "nodeIds": ["file:src/workflow-tool.ts", "function:src/workflow-tool.ts:createWorkflowTool"]
+    },
+    {
+      "order": 5,
+      "title": "核心引擎 — 解析与执行",
+      "description": "parseWorkflowScript() 用 acorn AST 解析脚本、提取元数据、验证确定性。runWorkflow() 在 Node vm 沙箱中执行，注入 agent/parallel/pipeline 等全局函数，管理并发和生命周期。",
+      "nodeIds": [
+        "file:src/workflow.ts",
+        "function:src/workflow.ts:parseWorkflowScript",
+        "function:src/workflow.ts:runWorkflow"
+      ]
+    },
+    {
+      "order": 6,
+      "title": "子 Agent 运行",
+      "description": "WorkflowAgent 类封装 Pi 的 createAgentSession，为每个子 agent 创建独立内存会话。支持结构化输出（注入 terminate 工具）和信号取消。",
+      "nodeIds": ["file:src/agent.ts", "class:src/agent.ts:WorkflowAgent", "file:src/structured-output.ts"]
+    },
+    {
+      "order": 7,
+      "title": "进度展示",
+      "description": "WorkflowSnapshot 承载运行时状态，renderWorkflowLines() 按 phase 分组渲染代理进度（▶/✓/✗/-），支持 tool update stream 和 widget 两种显示模式。",
+      "nodeIds": [
+        "file:src/display.ts",
+        "function:src/display.ts:renderWorkflowLines",
+        "function:src/display.ts:createWorkflowSnapshot"
+      ]
+    },
+    {
+      "order": 8,
+      "title": "测试覆盖",
+      "description": "四组单元测试覆盖解析器（AST 边界条件）、运行时（沙箱行为）、显示（渲染逻辑）、工具注册（prompt 指南正确性）。",
+      "nodeIds": [
+        "file:tests/workflow-parser.test.ts",
+        "file:tests/workflow-runtime.test.ts",
+        "file:tests/workflow-display.test.ts",
+        "file:tests/workflow-tool.test.ts"
+      ]
+    }
+  ]
+}

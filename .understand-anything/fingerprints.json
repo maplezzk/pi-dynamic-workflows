@@ -1,0 +1,672 @@
+{
+  "version": "1.0.0",
+  "gitCommitHash": "31b2aca0f1cb195aafbfc5e3ee2b8c83ad3f21a2",
+  "generatedAt": "2026-06-05T11:11:13.941Z",
+  "files": {
+    "src/index.ts": {
+      "filePath": "src/index.ts",
+      "contentHash": "142514695ab8632a1bf21de36ee9c349d8d38f791cbf2323e233ed61c0dfa18b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "AgentRunOptions",
+        "AgentRunResult",
+        "WorkflowAgentOptions",
+        "WorkflowAgent",
+        "WorkflowAgentSnapshot",
+        "WorkflowAgentStatus",
+        "WorkflowDisplay",
+        "WorkflowDisplayOptions",
+        "WorkflowSnapshot",
+        "createToolUpdateWorkflowDisplay",
+        "createWidgetWorkflowDisplay",
+        "createWorkflowSnapshot",
+        "preview",
+        "recomputeWorkflowSnapshot",
+        "renderWorkflowLines",
+        "renderWorkflowText",
+        "StructuredOutputCapture",
+        "StructuredOutputToolOptions",
+        "createStructuredOutputTool",
+        "AgentOptions",
+        "WorkflowMeta",
+        "WorkflowMetaPhase",
+        "WorkflowRunOptions",
+        "WorkflowRunResult",
+        "parseWorkflowScript",
+        "runWorkflow",
+        "WorkflowToolInput",
+        "WorkflowToolOptions",
+        "createWorkflowTool"
+      ],
+      "totalLines": 31,
+      "hasStructuralAnalysis": true
+    },
+    "src/workflow.ts": {
+      "filePath": "src/workflow.ts",
+      "contentHash": "8fdf09b77a769bb4b553fd07ff4561b6ea2bb18b295e4d6f1e0637298544adc0",
+      "functions": [
+        {
+          "name": "runWorkflow",
+          "params": ["script", "options"],
+          "returnType": "Promise<WorkflowRunResult<T>>",
+          "exported": true,
+          "lineCount": 164
+        },
+        {
+          "name": "parseWorkflowScript",
+          "params": ["script"],
+          "returnType": "{ meta: WorkflowMeta; body: string }",
+          "exported": true,
+          "lineCount": 38
+        },
+        {
+          "name": "evaluateLiteral",
+          "params": ["node", "path"],
+          "returnType": "unknown",
+          "exported": false,
+          "lineCount": 37
+        },
+        {
+          "name": "propertyKey",
+          "params": ["node", "path"],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "assertDeterministicAst",
+          "params": ["node"],
+          "returnType": "void",
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "astChildren",
+          "params": ["node"],
+          "returnType": "AnyNode[]",
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "isAstNode",
+          "params": ["value"],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "isDateNowCall",
+          "params": ["node"],
+          "returnType": "boolean",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "isMathRandomCall",
+          "params": ["node"],
+          "returnType": "boolean",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "isNewDateExpression",
+          "params": ["node"],
+          "returnType": "boolean",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "isMemberExpression",
+          "params": ["node", "objectName", "propertyName"],
+          "returnType": "boolean",
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "propertyNameOf",
+          "params": ["node"],
+          "returnType": "string | undefined",
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "staticStringOf",
+          "params": ["node"],
+          "returnType": "string | undefined",
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "validateMeta",
+          "params": ["meta"],
+          "exported": false,
+          "lineCount": 17
+        },
+        {
+          "name": "createLimiter",
+          "params": ["limit"],
+          "exported": false,
+          "lineCount": 17
+        },
+        {
+          "name": "requireString",
+          "params": ["value", "name"],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "optionalString",
+          "params": ["value", "name"],
+          "returnType": "string | undefined",
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "normalizeAgentOptions",
+          "params": ["value"],
+          "returnType": "AgentOptions",
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "assertStructuredCloneable",
+          "params": ["value", "name"],
+          "returnType": "void",
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "defaultAgentLabel",
+          "params": ["phase", "index"],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "buildAgentInstructions",
+          "params": ["phase", "options"],
+          "returnType": "string | undefined",
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "estimateTokens",
+          "params": ["value"],
+          "returnType": "number",
+          "exported": false,
+          "lineCount": 3
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:vm",
+          "specifiers": ["vm"]
+        },
+        {
+          "source": "acorn",
+          "specifiers": ["Node"]
+        },
+        {
+          "source": "acorn",
+          "specifiers": ["parse"]
+        },
+        {
+          "source": "typebox",
+          "specifiers": ["TSchema"]
+        },
+        {
+          "source": "./agent.js",
+          "specifiers": ["WorkflowAgent", "WorkflowAgentOptions"]
+        }
+      ],
+      "exports": ["runWorkflow", "parseWorkflowScript"],
+      "totalLines": 456,
+      "hasStructuralAnalysis": true
+    },
+    "src/workflow-tool.ts": {
+      "filePath": "src/workflow-tool.ts",
+      "contentHash": "c1167716263a831dff3a771bb2a6ae788cb1ea2b9ca3fe8a98739a362865960b",
+      "functions": [
+        {
+          "name": "createWorkflowTool",
+          "params": ["options"],
+          "returnType": "ToolDefinition<typeof workflowToolSchema, any>",
+          "exported": true,
+          "lineCount": 145
+        },
+        {
+          "name": "normalizeWorkflowToolArgs",
+          "params": ["args"],
+          "returnType": "WorkflowToolInput",
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "normalizeWorkflowScript",
+          "params": ["script"],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "isAbortError",
+          "params": ["error"],
+          "returnType": "boolean",
+          "exported": false,
+          "lineCount": 4
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@earendil-works/pi-coding-agent",
+          "specifiers": ["defineTool", "ToolDefinition"]
+        },
+        {
+          "source": "@earendil-works/pi-tui",
+          "specifiers": ["Text"]
+        },
+        {
+          "source": "typebox",
+          "specifiers": ["Type"]
+        },
+        {
+          "source": "./display.js",
+          "specifiers": [
+            "createToolUpdateWorkflowDisplay",
+            "createWorkflowSnapshot",
+            "preview",
+            "recomputeWorkflowSnapshot",
+            "renderWorkflowText",
+            "WorkflowSnapshot"
+          ]
+        },
+        {
+          "source": "./workflow.js",
+          "specifiers": ["parseWorkflowScript", "runWorkflow", "WorkflowRunResult"]
+        }
+      ],
+      "exports": ["createWorkflowTool"],
+      "totalLines": 210,
+      "hasStructuralAnalysis": true
+    },
+    "src/agent.ts": {
+      "filePath": "src/agent.ts",
+      "contentHash": "267a474b824f472f1b7960f032bd0c5046476bd2609260f8e4edaf40cc280336",
+      "functions": [],
+      "classes": [
+        {
+          "name": "WorkflowAgent",
+          "methods": ["constructor", "run", "buildPrompt", "lastAssistantText"],
+          "properties": ["cwd", "baseTools", "sessionOptions", "instructions"],
+          "exported": true,
+          "lineCount": 96
+        }
+      ],
+      "imports": [
+        {
+          "source": "@earendil-works/pi-ai",
+          "specifiers": ["AssistantMessage", "TextContent"]
+        },
+        {
+          "source": "@earendil-works/pi-coding-agent",
+          "specifiers": [
+            "CreateAgentSessionOptions",
+            "createAgentSession",
+            "createCodingTools",
+            "getAgentDir",
+            "SessionManager",
+            "SettingsManager",
+            "ToolDefinition"
+          ]
+        },
+        {
+          "source": "typebox",
+          "specifiers": ["Static", "TSchema"]
+        },
+        {
+          "source": "./structured-output.js",
+          "specifiers": ["createStructuredOutputTool", "StructuredOutputCapture"]
+        }
+      ],
+      "exports": ["WorkflowAgent"],
+      "totalLines": 132,
+      "hasStructuralAnalysis": true
+    },
+    "src/structured-output.ts": {
+      "filePath": "src/structured-output.ts",
+      "contentHash": "d2d46e0079e2f0ec826029541ae9e2d8df8b9b82d599b7a225629e2f04eb5263",
+      "functions": [
+        {
+          "name": "createStructuredOutputTool",
+          "params": ["{\n  schema,\n  capture,\n  name = \"structured_output\",\n}"],
+          "returnType": "ToolDefinition<TSchemaDef, Static<TSchemaDef>>",
+          "exported": true,
+          "lineCount": 26
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@earendil-works/pi-coding-agent",
+          "specifiers": ["defineTool", "ToolDefinition"]
+        },
+        {
+          "source": "typebox",
+          "specifiers": ["Static", "TSchema"]
+        }
+      ],
+      "exports": ["createStructuredOutputTool"],
+      "totalLines": 48,
+      "hasStructuralAnalysis": true
+    },
+    "src/display.ts": {
+      "filePath": "src/display.ts",
+      "contentHash": "180e18a2ad463cf1abcc22c5bf0726a3ffd0d74885fe6a3854dfdfdaf7500421",
+      "functions": [
+        {
+          "name": "createWorkflowSnapshot",
+          "params": ["meta"],
+          "returnType": "WorkflowSnapshot",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "recomputeWorkflowSnapshot",
+          "params": ["snapshot"],
+          "returnType": "WorkflowSnapshot",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "createWidgetWorkflowDisplay",
+          "params": ["ctx", "options"],
+          "returnType": "WorkflowDisplay",
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "createToolUpdateWorkflowDisplay",
+          "params": ["onUpdate", "ctx", "options"],
+          "returnType": "WorkflowDisplay",
+          "exported": true,
+          "lineCount": 31
+        },
+        {
+          "name": "renderWorkflowLines",
+          "params": ["snapshot", "options"],
+          "returnType": "string[]",
+          "exported": true,
+          "lineCount": 62
+        },
+        {
+          "name": "renderWorkflowText",
+          "params": ["snapshot", "completed", "options"],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "statusLine",
+          "params": ["snapshot", "completed"],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "statusIcon",
+          "params": ["status"],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "unique",
+          "params": ["values"],
+          "returnType": "string[]",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "shorten",
+          "params": ["value", "max"],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "preview",
+          "params": ["value", "max"],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@earendil-works/pi-coding-agent",
+          "specifiers": ["ExtensionContext"]
+        },
+        {
+          "source": "./workflow.js",
+          "specifiers": ["WorkflowMeta"]
+        }
+      ],
+      "exports": [
+        "createWorkflowSnapshot",
+        "recomputeWorkflowSnapshot",
+        "createWidgetWorkflowDisplay",
+        "createToolUpdateWorkflowDisplay",
+        "renderWorkflowLines",
+        "renderWorkflowText",
+        "preview"
+      ],
+      "totalLines": 236,
+      "hasStructuralAnalysis": true
+    },
+    "extensions/workflow.ts": {
+      "filePath": "extensions/workflow.ts",
+      "contentHash": "3f7bbc59cbc5848bae3a14c80c3b578fc69d881bed995bd74cf5596cc7f4e092",
+      "functions": [
+        {
+          "name": "extension",
+          "params": ["pi"],
+          "exported": true,
+          "lineCount": 11
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@earendil-works/pi-coding-agent",
+          "specifiers": ["ExtensionAPI"]
+        },
+        {
+          "source": "../src/index.js",
+          "specifiers": ["createWorkflowTool"]
+        }
+      ],
+      "exports": ["extension"],
+      "totalLines": 15,
+      "hasStructuralAnalysis": true
+    },
+    "types/workflow.d.ts": {
+      "filePath": "types/workflow.d.ts",
+      "contentHash": "6480f9cd4341c859efdb6dc5258de444061b763cf9481b4a3c57b484ef954f2c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 96,
+      "hasStructuralAnalysis": true
+    },
+    "tests/workflow-parser.test.ts": {
+      "filePath": "tests/workflow-parser.test.ts",
+      "contentHash": "789067af986a7394b0a9c7868d29b93d583e078222b207c2e40dc8e3de01ee96",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:assert/strict",
+          "specifiers": ["assert"]
+        },
+        {
+          "source": "node:test",
+          "specifiers": ["test"]
+        },
+        {
+          "source": "../src/workflow.js",
+          "specifiers": ["parseWorkflowScript"]
+        }
+      ],
+      "exports": [],
+      "totalLines": 161,
+      "hasStructuralAnalysis": true
+    },
+    "tests/workflow-runtime.test.ts": {
+      "filePath": "tests/workflow-runtime.test.ts",
+      "contentHash": "dd856007dd746978b97db9d6df297bbf6d215acb4c7cabb2030f951575dbcdad",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:assert/strict",
+          "specifiers": ["assert"]
+        },
+        {
+          "source": "node:test",
+          "specifiers": ["test"]
+        },
+        {
+          "source": "../src/workflow.js",
+          "specifiers": ["runWorkflow"]
+        }
+      ],
+      "exports": [],
+      "totalLines": 125,
+      "hasStructuralAnalysis": true
+    },
+    "tests/workflow-display.test.ts": {
+      "filePath": "tests/workflow-display.test.ts",
+      "contentHash": "67ad8d0344be701e7ce4b7b6152b204c973dd655dd95d6a12b0eed9314deb99a",
+      "functions": [
+        {
+          "name": "snapshot",
+          "params": ["overrides"],
+          "returnType": "WorkflowSnapshot",
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "agent",
+          "params": ["overrides"],
+          "returnType": "WorkflowAgentSnapshot",
+          "exported": false,
+          "lineCount": 10
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:assert/strict",
+          "specifiers": ["assert"]
+        },
+        {
+          "source": "node:test",
+          "specifiers": ["test"]
+        },
+        {
+          "source": "../src/display.js",
+          "specifiers": [
+            "createWorkflowSnapshot",
+            "recomputeWorkflowSnapshot",
+            "renderWorkflowLines",
+            "renderWorkflowText",
+            "WorkflowAgentSnapshot",
+            "WorkflowSnapshot"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 119,
+      "hasStructuralAnalysis": true
+    },
+    "tests/workflow-tool.test.ts": {
+      "filePath": "tests/workflow-tool.test.ts",
+      "contentHash": "75e1855da9f5f0c2a970f4f8160d33728a7d3e72df59d3eecb2bb540c2ff359f",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:assert/strict",
+          "specifiers": ["assert"]
+        },
+        {
+          "source": "node:test",
+          "specifiers": ["test"]
+        },
+        {
+          "source": "../src/workflow-tool.js",
+          "specifiers": ["createWorkflowTool"]
+        }
+      ],
+      "exports": [],
+      "totalLines": 13,
+      "hasStructuralAnalysis": true
+    },
+    "README.md": {
+      "filePath": "README.md",
+      "contentHash": "5ca5a29bf994a8ce5dd44d31a288cda99292ee038ef42aba88cd1d516c934bef",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 174,
+      "hasStructuralAnalysis": true
+    },
+    "package.json": {
+      "filePath": "package.json",
+      "contentHash": "c463023310b9d9babb90dba33b3a79eb71f0d92c5bdc010753afeaf45f1e6e64",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 69,
+      "hasStructuralAnalysis": true
+    },
+    "tsconfig.json": {
+      "filePath": "tsconfig.json",
+      "contentHash": "1111e1197512a289ea2e455712b08fa822b6eddfea6e91c5477d8d1555d90bb3",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 16,
+      "hasStructuralAnalysis": true
+    },
+    "biome.json": {
+      "filePath": "biome.json",
+      "contentHash": "315947a43f7e7ceda7c3bebf6ade1d09e252ac54bf76bc808317e6baa75e1034",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 29,
+      "hasStructuralAnalysis": true
+    },
+    ".gitignore": {
+      "filePath": ".gitignore",
+      "contentHash": "c7e7ff6a03930c07573cb1488b0f3a0df47e19061751fad38b1fa28b4bf1ef2d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 6,
+      "hasStructuralAnalysis": false
+    }
+  }
+}

@@ -6,6 +6,7 @@ export type {
   WorkflowDisplay,
   WorkflowDisplayOptions,
   WorkflowSnapshot,
+  WorkflowTheme,
 } from "./display.js";
 export {
   createToolUpdateWorkflowDisplay,
@@ -16,6 +17,7 @@ export {
   renderWorkflowLines,
   renderWorkflowText,
   renderWorkflowThemed,
+  renderWorkflowWidgetLines,
 } from "./display.js";
 export type { StructuredOutputCapture, StructuredOutputToolOptions } from "./structured-output.js";
 export { createStructuredOutputTool } from "./structured-output.js";
@@ -30,4 +32,4 @@ export type {
 } from "./workflow.js";
 export { parseWorkflowScript, runWorkflow } from "./workflow.js";
 export type { WorkflowToolInput, WorkflowToolOptions } from "./workflow-tool.js";
-export { createWorkflowTool } from "./workflow-tool.js";
+export { cancelRunningWorkflow, createWorkflowTool } from "./workflow-tool.js";

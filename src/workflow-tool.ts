@@ -57,6 +57,21 @@ export interface WorkflowToolOptions {
   pi?: { sendMessage: (message: any, options?: any) => void };
 }
 
+let runningWorkflow: { name: string; abortController: AbortController; cleanWidget?: () => void } | null = null;
+
+/**
+ * 取消正在运行的异步 workflow。
+ * 返回取消结果，供 workflow_cancel 工具和 session_shutdown 使用。
+ */
+export function cancelRunningWorkflow(): { cancelled: boolean; name?: string } {
+  if (!runningWorkflow) return { cancelled: false };
+  const { name, cleanWidget } = runningWorkflow;
+  runningWorkflow.abortController.abort();
+  // 立即清理 widget，不等 Promise 链 catch
+  if (cleanWidget) cleanWidget();
+  return { cancelled: true, name };
+}
+
 export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefinition<typeof workflowToolSchema, any> {
   return defineTool({
     name: "workflow",
@@ -102,44 +117,129 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
       }
       const script = normalizeWorkflowScript(rawScript);
       const parsed = parseWorkflowScript(script);
+
+      // === 异步模式 ===
+      const isAsync = process.env.PI_WORKFLOW_ASYNC === "true" && options.pi;
+      if (isAsync) {
+        if (runningWorkflow) {
+          throw new Error(`已有 workflow 在运行: ${runningWorkflow.name}`);
+        }
+
+        let snapshot: WorkflowSnapshot = createWorkflowSnapshot(parsed.meta);
+        snapshot.startedAt = Date.now();
+        const bgAbortController = new AbortController();
+        const name = parsed.meta.name;
+        const workflowCwd = options.cwd ?? ctx.cwd;
+
+        // Widget 实时状态栏
+        const { updateWidget, clearWidget } = setupWidget(ctx, () => snapshot);
+
+        // 存储清理函数供 cancelRunningWorkflow() 立即清理
+        runningWorkflow = { name, abortController: bgAbortController, cleanWidget: clearWidget };
+
+        const update = () => {
+          snapshot = recomputeWorkflowSnapshot(snapshot);
+          // 异步模式下 tool 已返回，onUpdate 通道已失效，仅通过 widget 推送状态
+          updateWidget();
+        };
+
+        // 后台 Promise 链
+        runWorkflow(script, {
+          ...createWorkflowRunOptions({
+            cwd: workflowCwd,
+            args: params.args,
+            signal: bgAbortController.signal,
+            concurrency: options.concurrency,
+            ctx,
+          }),
+          ...createWorkflowCallbacks({
+            snapshot: () => snapshot,
+            setSnapshot: (s) => {
+              snapshot = s;
+            },
+            update,
+            signal: bgAbortController.signal,
+            cwd: workflowCwd,
+            metaName: parsed.meta.name,
+          }),
+        })
+          .then((result) => {
+            if (result.agentCount === 0) {
+              throw new Error(
+                "workflow scripts must call agent() at least once; this workflow declared phases but did not run any subagents",
+              );
+            }
+            snapshot.result = result.result;
+            snapshot.durationMs = result.durationMs;
+            snapshot = recomputeWorkflowSnapshot(snapshot);
+            clearWidget();
+
+            const outFile = writeResultFile(workflowCwd, result.meta.name, result.result);
+            snapshot.resultFile = outFile;
+
+            runningWorkflow = null;
+
+            options.pi?.sendMessage(
+              {
+                customType: "workflow_result",
+                content: `Workflow ${name} completed with ${result.agentCount} agent(s) in ${result.durationMs}ms.\n结果已写入: ${outFile}`,
+                display: true,
+                details: snapshot,
+              },
+              { triggerTurn: true, deliverAs: "steer" },
+            );
+          })
+          .catch((error) => {
+            clearWidget();
+            runningWorkflow = null;
+
+            const aborted = isAbortError(error);
+            const errMsg = error instanceof Error ? error.message : String(error);
+            for (const agent of snapshot.agents) {
+              if (agent.status === "running") {
+                agent.status = aborted ? "skipped" : "error";
+                agent.error = aborted ? "cancelled" : errMsg;
+              }
+            }
+            snapshot = recomputeWorkflowSnapshot(snapshot);
+
+            if (aborted) {
+              options.pi?.sendMessage(
+                {
+                  customType: "workflow_result",
+                  content: `Workflow ${name} 已取消`,
+                  display: true,
+                  details: { ...snapshot, cancelled: true },
+                },
+                { triggerTurn: true, deliverAs: "steer" },
+              );
+            } else {
+              options.pi?.sendMessage(
+                {
+                  customType: "workflow_result",
+                  content: `Workflow ${name} failed: ${errMsg}`,
+                  display: true,
+                  details: { ...snapshot, error: errMsg },
+                },
+                { triggerTurn: true, deliverAs: "steer" },
+              );
+            }
+          });
+
+        return {
+          content: [{ type: "text", text: `Workflow ${name} 已启动，后台执行中...` }],
+          details: { name, status: "started" },
+        };
+      }
+
+      // === 同步模式（原逻辑）===
       let snapshot: WorkflowSnapshot = createWorkflowSnapshot(parsed.meta);
       const display = createToolUpdateWorkflowDisplay(onUpdate, undefined, workflowDisplayOptions);
 
-      (snapshot as any).startedAt = Date.now();
+      snapshot.startedAt = Date.now();
 
-      // Widget 实时状态栏（aboveEditor）
-      const WIDGET_KEY = Symbol.for("pi-workflow-widget-interval");
-      let widgetInterval: ReturnType<typeof setInterval> | null = null;
-
-      // 清除旧定时器（/reload 防护）
-      const prev = (globalThis as any)[WIDGET_KEY];
-      if (prev) clearInterval(prev);
-
-      const updateWidget = () => {
-        if (!ctx.hasUI) return;
-        ctx.ui.setWidget(
-          "workflow-status",
-          (_tui: any, _theme: any) => ({
-            invalidate() {},
-            render(w: number) {
-              return renderWorkflowWidgetLines(snapshot, w);
-            },
-          }),
-          { placement: "aboveEditor" },
-        );
-      };
-
-      updateWidget();
-      widgetInterval = setInterval(updateWidget, 1000);
-      (globalThis as any)[WIDGET_KEY] = widgetInterval;
-
-      const clearWidget = () => {
-        if (widgetInterval) {
-          clearInterval(widgetInterval);
-          widgetInterval = null;
-        }
-        if (ctx.hasUI) ctx.ui.setWidget("workflow-status", undefined);
-      };
+      const workflowCwd = options.cwd ?? ctx.cwd;
+      const { updateWidget, clearWidget } = setupWidget(ctx, () => snapshot);
 
       const update = () => {
         snapshot = recomputeWorkflowSnapshot(snapshot);
@@ -147,70 +247,26 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
         updateWidget();
       };
 
-      const recordPhase = (title: string | undefined) => {
-        if (!title) return;
-        if (!snapshot.phases.includes(title)) snapshot.phases.push(title);
-      };
-
       let result: WorkflowRunResult;
       try {
         result = await runWorkflow(script, {
-          cwd: options.cwd ?? ctx.cwd,
-          args: params.args,
-          signal,
-          concurrency: options.concurrency,
-          session: {
-            modelRegistry: ctx.modelRegistry,
-            model: ctx.model,
-          },
-          subagent: {
-            launchCtx: ctx as any,
-            model: typeof ctx.model === "string" ? ctx.model : ((ctx.model as any)?.id ?? String(ctx.model ?? "")),
-            cwd: options.cwd ?? ctx.cwd,
-          },
-          onLog(message) {
-            snapshot.logs.push(message);
-            update();
-          },
-          onPhase(title) {
-            snapshot.currentPhase = title;
-            recordPhase(title);
-            update();
-          },
-          onAgentStart(event) {
-            if (signal?.aborted) throw new Error("Workflow was aborted");
-            recordPhase(event.phase);
-            snapshot.agents.push({
-              id: snapshot.agents.length + 1,
-              label: event.label,
-              phase: event.phase,
-              prompt: event.prompt,
-              status: "running",
-              startedAt: Date.now(),
-            });
-            update();
-          },
-          onAgentEnd(event) {
-            const agent = [...snapshot.agents]
-              .reverse()
-              .find((item) => item.label === event.label && item.status === "running");
-            if (agent) {
-              agent.status = event.result === null ? "error" : "done";
-              agent.finishedAt = Date.now();
-              if (event.error) agent.error = event.error;
-              // 写入子 agent 结果文件
-              if (event.result !== null) {
-                const cwd = options.cwd ?? ctx.cwd;
-                const agentsDir = join(cwd, ".pi", "workflows", parsed.meta.name, "agents");
-                mkdirSync(agentsDir, { recursive: true });
-                const safeLabel = agent.label.replace(/[/\\:*?"<>|\s]+/g, "_").slice(0, 32);
-                const agentFile = join(agentsDir, `${String(agent.id).padStart(2, "0")}-${safeLabel}.json`);
-                writeFileSync(agentFile, JSON.stringify(event.result, null, 2), "utf8");
-                agent.resultPreview = `📄 ${agentFile}`;
-              }
-            }
-            update();
-          },
+          ...createWorkflowRunOptions({
+            cwd: workflowCwd,
+            args: params.args,
+            signal,
+            concurrency: options.concurrency,
+            ctx,
+          }),
+          ...createWorkflowCallbacks({
+            snapshot: () => snapshot,
+            setSnapshot: (s) => {
+              snapshot = s;
+            },
+            update,
+            signal,
+            cwd: workflowCwd,
+            metaName: parsed.meta.name,
+          }),
         });
       } catch (error) {
         if (signal?.aborted || isAbortError(error)) {
@@ -242,14 +298,8 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
       clearWidget();
 
       // 写入结果文件
-      const cwd = options.cwd ?? ctx.cwd;
-      const outDir = join(cwd, ".pi", "workflows");
-      mkdirSync(outDir, { recursive: true });
-      const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-      const outFile = join(outDir, `${result.meta.name}-${ts}.json`);
-      writeFileSync(outFile, JSON.stringify(result.result, null, 2), "utf8");
-
-      snapshot.resultFile = outFile; // 渲染用
+      const outFile = writeResultFile(workflowCwd, result.meta.name, result.result);
+      snapshot.resultFile = outFile;
 
       return {
         content: [
@@ -309,4 +359,147 @@ function normalizeWorkflowScript(script: string): string {
 function isAbortError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   return /\babort(?:ed)?\b/i.test(error.message);
+}
+
+// --- 提取的共享辅助函数 ---
+
+/** 设置 Widget 实时状态栏，返回 updateWidget/clearWidget */
+function setupWidget(
+  ctx: any,
+  getSnapshot: () => WorkflowSnapshot,
+): { updateWidget: () => void; clearWidget: () => void } {
+  const WIDGET_KEY = Symbol.for("pi-workflow-widget-interval");
+  let widgetInterval: ReturnType<typeof setInterval> | null = null;
+
+  // 清除旧定时器（/reload 防护）
+  const prev = (globalThis as any)[WIDGET_KEY];
+  if (prev) clearInterval(prev);
+
+  const updateWidget = () => {
+    if (!ctx.hasUI) return;
+    ctx.ui.setWidget(
+      "workflow-status",
+      (_tui: any, _theme: any) => ({
+        invalidate() {},
+        render(w: number) {
+          return renderWorkflowWidgetLines(getSnapshot(), w);
+        },
+      }),
+      { placement: "aboveEditor" },
+    );
+  };
+
+  updateWidget();
+  widgetInterval = setInterval(updateWidget, 1000);
+  (globalThis as any)[WIDGET_KEY] = widgetInterval;
+
+  const clearWidget = () => {
+    if (widgetInterval) {
+      clearInterval(widgetInterval);
+      widgetInterval = null;
+    }
+    (globalThis as any)[WIDGET_KEY] = null;
+    if (ctx.hasUI) ctx.ui.setWidget("workflow-status", undefined);
+  };
+
+  return { updateWidget, clearWidget };
+}
+
+/** 创建 runWorkflow 的基础选项（不含回调） */
+function createWorkflowRunOptions(opts: {
+  cwd: string;
+  args?: unknown;
+  signal?: AbortSignal;
+  concurrency?: number;
+  ctx: any;
+}) {
+  return {
+    cwd: opts.cwd,
+    args: opts.args,
+    signal: opts.signal,
+    concurrency: opts.concurrency,
+    session: {
+      modelRegistry: opts.ctx.modelRegistry,
+      model: opts.ctx.model,
+    },
+    subagent: {
+      launchCtx: opts.ctx as any,
+      model:
+        typeof opts.ctx.model === "string"
+          ? opts.ctx.model
+          : ((opts.ctx.model as any)?.id ?? String(opts.ctx.model ?? "")),
+      cwd: opts.cwd,
+    },
+  };
+}
+
+/** 创建 runWorkflow 的回调选项 */
+function createWorkflowCallbacks(opts: {
+  snapshot: () => WorkflowSnapshot;
+  setSnapshot: (s: WorkflowSnapshot) => void;
+  update: () => void;
+  signal?: AbortSignal;
+  cwd: string;
+  metaName: string;
+}) {
+  const recordPhase = (title: string | undefined) => {
+    if (!title) return;
+    const snap = opts.snapshot();
+    if (!snap.phases.includes(title)) snap.phases.push(title);
+  };
+
+  return {
+    onLog(message: string) {
+      opts.snapshot().logs.push(message);
+      opts.update();
+    },
+    onPhase(title: string) {
+      const snap = opts.snapshot();
+      snap.currentPhase = title;
+      recordPhase(title);
+      opts.update();
+    },
+    onAgentStart(event: { label: string; phase?: string; prompt: string }) {
+      if (opts.signal?.aborted) throw new Error("Workflow was aborted");
+      recordPhase(event.phase);
+      const snap = opts.snapshot();
+      snap.agents.push({
+        id: snap.agents.length + 1,
+        label: event.label,
+        phase: event.phase,
+        prompt: event.prompt,
+        status: "running",
+        startedAt: Date.now(),
+      });
+      opts.update();
+    },
+    onAgentEnd(event: { label: string; phase?: string; result: unknown; error?: string }) {
+      const snap = opts.snapshot();
+      const agent = [...snap.agents].reverse().find((item) => item.label === event.label && item.status === "running");
+      if (agent) {
+        agent.status = event.result === null ? "error" : "done";
+        agent.finishedAt = Date.now();
+        if (event.error) agent.error = event.error;
+        if (event.result !== null) {
+          const agentsDir = join(opts.cwd, ".pi", "workflows", opts.metaName, "agents");
+          mkdirSync(agentsDir, { recursive: true });
+          const safeLabel = agent.label.replace(/[/\\:*?"<>|\s]+/g, "_").slice(0, 32);
+          const agentFile = join(agentsDir, `${String(agent.id).padStart(2, "0")}-${safeLabel}.json`);
+          writeFileSync(agentFile, JSON.stringify(event.result, null, 2), "utf8");
+          agent.resultPreview = `📄 ${agentFile}`;
+        }
+      }
+      opts.update();
+    },
+  };
+}
+
+/** 写入 workflow 结果文件，返回文件路径 */
+function writeResultFile(cwd: string, metaName: string, result: unknown): string {
+  const outDir = join(cwd, ".pi", "workflows");
+  mkdirSync(outDir, { recursive: true });
+  const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const outFile = join(outDir, `${metaName}-${ts}.json`);
+  writeFileSync(outFile, JSON.stringify(result, null, 2), "utf8");
+  return outFile;
 }
