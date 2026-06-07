@@ -15,6 +15,7 @@ export {
   recomputeWorkflowSnapshot,
   renderWorkflowLines,
   renderWorkflowText,
+  renderWorkflowThemed,
 } from "./display.js";
 export type { StructuredOutputCapture, StructuredOutputToolOptions } from "./structured-output.js";
 export { createStructuredOutputTool } from "./structured-output.js";

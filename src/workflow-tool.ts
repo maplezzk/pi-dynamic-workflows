@@ -1,19 +1,17 @@
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import type { WorkflowAgentSnapshot } from "./display.js";
+import type { WorkflowTheme } from "./display.js";
 import {
   createToolUpdateWorkflowDisplay,
   createWorkflowSnapshot,
-  preview,
   recomputeWorkflowSnapshot,
   renderWorkflowText,
+  renderWorkflowThemed,
+  renderWorkflowWidgetLines,
   type WorkflowSnapshot,
-} from "./display.js";
-import {
-  formatWorkflowStatusAggregate,
 } from "./display.js";
 import { parseWorkflowScript, runWorkflow, type WorkflowRunResult } from "./workflow.js";
 
@@ -30,7 +28,8 @@ const workflowToolSchema = Type.Object({
   ),
   file: Type.Optional(
     Type.String({
-      description: "Absolute or relative path to a .js workflow file. Reads the file and executes it as the workflow script.",
+      description:
+        "Absolute or relative path to a .js workflow file. Reads the file and executes it as the workflow script.",
     }),
   ),
   args: Type.Optional(
@@ -97,25 +96,55 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
       } else if (params.script) {
         rawScript = params.script;
       } else {
-        throw new Error("workflow requires either a `script` (JavaScript string) or `file` (path to .js file) argument");
+        throw new Error(
+          "workflow requires either a `script` (JavaScript string) or `file` (path to .js file) argument",
+        );
       }
       const script = normalizeWorkflowScript(rawScript);
       const parsed = parseWorkflowScript(script);
       let snapshot: WorkflowSnapshot = createWorkflowSnapshot(parsed.meta);
       const display = createToolUpdateWorkflowDisplay(onUpdate, undefined, workflowDisplayOptions);
 
-      // 节流发送 workflow_status 系统消息（与 pi-interactive-subagents 一致）
-      const sendStatus = (_force = false) => {
-        // 暂时禁用以排查问题
-      };
-      const flushStatus = () => {};
-
       (snapshot as any).startedAt = Date.now();
+
+      // Widget 实时状态栏（aboveEditor）
+      const WIDGET_KEY = Symbol.for("pi-workflow-widget-interval");
+      let widgetInterval: ReturnType<typeof setInterval> | null = null;
+
+      // 清除旧定时器（/reload 防护）
+      const prev = (globalThis as any)[WIDGET_KEY];
+      if (prev) clearInterval(prev);
+
+      const updateWidget = () => {
+        if (!ctx.hasUI) return;
+        ctx.ui.setWidget(
+          "workflow-status",
+          (_tui: any, _theme: any) => ({
+            invalidate() {},
+            render(w: number) {
+              return renderWorkflowWidgetLines(snapshot, w);
+            },
+          }),
+          { placement: "aboveEditor" },
+        );
+      };
+
+      updateWidget();
+      widgetInterval = setInterval(updateWidget, 1000);
+      (globalThis as any)[WIDGET_KEY] = widgetInterval;
+
+      const clearWidget = () => {
+        if (widgetInterval) {
+          clearInterval(widgetInterval);
+          widgetInterval = null;
+        }
+        if (ctx.hasUI) ctx.ui.setWidget("workflow-status", undefined);
+      };
 
       const update = () => {
         snapshot = recomputeWorkflowSnapshot(snapshot);
         display.update(snapshot);
-        sendStatus(false);
+        updateWidget();
       };
 
       const recordPhase = (title: string | undefined) => {
@@ -193,8 +222,10 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
           }
           snapshot = recomputeWorkflowSnapshot(snapshot);
           display.complete(snapshot);
+          clearWidget();
           throw new Error("Workflow was aborted");
         }
+        clearWidget();
         throw error;
       }
 
@@ -208,6 +239,7 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
       snapshot.durationMs = result.durationMs;
       snapshot = recomputeWorkflowSnapshot(snapshot);
       display.complete(snapshot);
+      clearWidget();
 
       // 写入结果文件
       const cwd = options.cwd ?? ctx.cwd;
@@ -218,10 +250,6 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
       writeFileSync(outFile, JSON.stringify(result.result, null, 2), "utf8");
 
       snapshot.resultFile = outFile; // 渲染用
-
-      // 最终状态消息（强制刷新）— 暂时禁用
-      // flushStatus();
-      // if (options.pi) { try { ... } catch {} }
 
       return {
         content: [
@@ -247,7 +275,14 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
     renderResult(result, { isPartial }, theme) {
       const snapshot = result.details as WorkflowSnapshot | undefined;
       if (snapshot?.name) {
-        return new Text(renderWorkflowText(snapshot, !isPartial, workflowDisplayOptions), 0, 0);
+        if (!isPartial) {
+          return new Text(
+            renderWorkflowThemed(snapshot, theme as unknown as WorkflowTheme, workflowDisplayOptions),
+            0,
+            0,
+          );
+        }
+        return new Text(renderWorkflowText(snapshot, false, workflowDisplayOptions), 0, 0);
       }
       const text = result.content?.[0];
       return new Text(text?.type === "text" ? text.text : theme.fg("muted", "workflow"), 0, 0);
@@ -256,7 +291,8 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
 }
 
 function normalizeWorkflowToolArgs(args: unknown): WorkflowToolInput {
-  if (!args || typeof args !== "object") throw new Error("workflow requires an object argument with a script or file parameter");
+  if (!args || typeof args !== "object")
+    throw new Error("workflow requires an object argument with a script or file parameter");
   const value = args as Record<string, unknown>;
   if (typeof value.file !== "string" && typeof value.script !== "string")
     throw new Error("workflow requires `script` (JavaScript string) or `file` (path to .js file)");

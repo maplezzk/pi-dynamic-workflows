@@ -133,7 +133,12 @@ export async function runWorkflow<T = unknown>(
       } catch (error) {
         if (options.signal?.aborted) throw error;
         log(`agent ${label} failed: ${error instanceof Error ? error.message : String(error)}`);
-        options.onAgentEnd?.({ label, phase: assignedPhase, result: null, error: error instanceof Error ? error.message : String(error) });
+        options.onAgentEnd?.({
+          label,
+          phase: assignedPhase,
+          result: null,
+          error: error instanceof Error ? error.message : String(error),
+        });
         return null;
       }
     });
