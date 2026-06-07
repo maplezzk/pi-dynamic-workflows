@@ -3,6 +3,7 @@ import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { WorkflowAgentSnapshot } from "./display.js";
 import {
   createToolUpdateWorkflowDisplay,
   createWorkflowSnapshot,
@@ -10,6 +11,9 @@ import {
   recomputeWorkflowSnapshot,
   renderWorkflowText,
   type WorkflowSnapshot,
+} from "./display.js";
+import {
+  formatWorkflowStatusAggregate,
 } from "./display.js";
 import { parseWorkflowScript, runWorkflow, type WorkflowRunResult } from "./workflow.js";
 
@@ -51,6 +55,7 @@ const workflowDisplayOptions = {
 export interface WorkflowToolOptions {
   cwd?: string;
   concurrency?: number;
+  pi?: { sendMessage: (message: any, options?: any) => void };
 }
 
 export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefinition<typeof workflowToolSchema, any> {
@@ -99,9 +104,18 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
       let snapshot: WorkflowSnapshot = createWorkflowSnapshot(parsed.meta);
       const display = createToolUpdateWorkflowDisplay(onUpdate, undefined, workflowDisplayOptions);
 
+      // 节流发送 workflow_status 系统消息（与 pi-interactive-subagents 一致）
+      const sendStatus = (_force = false) => {
+        // 暂时禁用以排查问题
+      };
+      const flushStatus = () => {};
+
+      (snapshot as any).startedAt = Date.now();
+
       const update = () => {
         snapshot = recomputeWorkflowSnapshot(snapshot);
         display.update(snapshot);
+        sendStatus(false);
       };
 
       const recordPhase = (title: string | undefined) => {
@@ -143,6 +157,7 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
               phase: event.phase,
               prompt: event.prompt,
               status: "running",
+              startedAt: Date.now(),
             });
             update();
           },
@@ -152,6 +167,8 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
               .find((item) => item.label === event.label && item.status === "running");
             if (agent) {
               agent.status = event.result === null ? "error" : "done";
+              agent.finishedAt = Date.now();
+              if (event.error) agent.error = event.error;
               // 写入子 agent 结果文件
               if (event.result !== null) {
                 const cwd = options.cwd ?? ctx.cwd;
@@ -201,6 +218,10 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}): ToolDefin
       writeFileSync(outFile, JSON.stringify(result.result, null, 2), "utf8");
 
       snapshot.resultFile = outFile; // 渲染用
+
+      // 最终状态消息（强制刷新）— 暂时禁用
+      // flushStatus();
+      // if (options.pi) { try { ... } catch {} }
 
       return {
         content: [

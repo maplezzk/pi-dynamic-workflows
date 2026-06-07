@@ -29,7 +29,7 @@ export interface WorkflowRunOptions extends WorkflowAgentOptions {
   onLog?: (message: string) => void;
   onPhase?: (title: string) => void;
   onAgentStart?: (event: { label: string; phase?: string; prompt: string }) => void;
-  onAgentEnd?: (event: { label: string; phase?: string; result: unknown }) => void;
+  onAgentEnd?: (event: { label: string; phase?: string; result: unknown; error?: string }) => void;
   /** When using subagent backend, the pi extension context from tool execute. */
   subagent?: SubagentWorkflowAgentOptions;
 }
@@ -133,7 +133,7 @@ export async function runWorkflow<T = unknown>(
       } catch (error) {
         if (options.signal?.aborted) throw error;
         log(`agent ${label} failed: ${error instanceof Error ? error.message : String(error)}`);
-        options.onAgentEnd?.({ label, phase: assignedPhase, result: null });
+        options.onAgentEnd?.({ label, phase: assignedPhase, result: null, error: error instanceof Error ? error.message : String(error) });
         return null;
       }
     });

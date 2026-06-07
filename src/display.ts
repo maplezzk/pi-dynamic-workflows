@@ -11,6 +11,8 @@ export interface WorkflowAgentSnapshot {
   status: WorkflowAgentStatus;
   resultPreview?: string;
   error?: string;
+  startedAt?: number;
+  finishedAt?: number;
 }
 
 export interface WorkflowSnapshot {
@@ -166,7 +168,8 @@ export function renderWorkflowLines(snapshot: WorkflowSnapshot, options: Workflo
     for (const agent of visibleAgents) {
       const order = `#${agent.id}`;
       const result = showResultPreviews && agent.resultPreview ? ` — ${agent.resultPreview}` : "";
-      lines.push(`    ${order} ${statusIcon(agent.status)} ${shorten(agent.label, 48)}${result}`);
+      const err = agent.status === "error" && agent.error ? ` [${shorten(agent.error, 80)}]` : "";
+      lines.push(`    ${order} ${statusIcon(agent.status)} ${shorten(agent.label, 48)}${result}${err}`);
     }
     if (agents.length > visibleAgents.length)
       lines.push(`    … ${agents.length - visibleAgents.length} earlier agents`);
@@ -177,7 +180,8 @@ export function renderWorkflowLines(snapshot: WorkflowSnapshot, options: Workflo
     lines.push("  Unphased");
     for (const agent of unphased.slice(-maxAgents)) {
       const result = showResultPreviews && agent.resultPreview ? ` — ${agent.resultPreview}` : "";
-      lines.push(`    #${agent.id} ${statusIcon(agent.status)} ${shorten(agent.label, 48)}${result}`);
+      const err = agent.status === "error" && agent.error ? ` [${shorten(agent.error, 80)}]` : "";
+      lines.push(`    #${agent.id} ${statusIcon(agent.status)} ${shorten(agent.label, 48)}${result}${err}`);
     }
   }
 
@@ -203,6 +207,41 @@ export function renderWorkflowText(
 ): string {
   const header = completed ? "Workflow completed" : "Workflow running";
   return [header, ...renderWorkflowLines(snapshot, options)].join("\n");
+}
+
+// 仿 pi-interactive-subagents 的 formatStatusLine：
+// 每行一个 agent 状态，格式：`{label} {state detail} {elapsed}.`
+export function formatAgentStatusLine(agent: WorkflowAgentSnapshot, now = Date.now()): string {
+  const label = shorten(agent.label, 64);
+  const elapsed = agent.startedAt ? ((agent.finishedAt ?? now) - agent.startedAt) / 1000 : 0;
+  const elapsedText = `${elapsed.toFixed(1)}s`;
+  if (agent.status === "running") {
+    return `${label} running ${elapsedText}, active.`;
+  }
+  if (agent.status === "done") {
+    return `${label} finished in ${elapsedText}.`;
+  }
+  if (agent.status === "error") {
+    return `${label} failed after ${elapsedText}${agent.error ? ` (${shorten(agent.error, 60)})` : ""}.`;
+  }
+  if (agent.status === "skipped") {
+    return `${label} skipped.`;
+  }
+  return `${label} queued.`;
+}
+
+// 汇总所有 active agent（queued + running），其他只输出当前 phase 的进行中 agent
+export function formatWorkflowStatusAggregate(
+  snapshot: WorkflowSnapshot,
+  lineLimit = 4,
+  now = Date.now(),
+): { lines: string[]; overflow: number } {
+  const running = snapshot.agents.filter((a) => a.status === "running");
+  const queued = snapshot.agents.filter((a) => a.status === "queued");
+  const recent = [...running, ...queued].slice(0, lineLimit);
+  const lines = recent.map((a) => formatAgentStatusLine(a, now));
+  const overflow = Math.max(0, running.length + queued.length - recent.length);
+  return { lines, overflow };
 }
 
 function statusLine(snapshot: WorkflowSnapshot, completed: boolean): string {
