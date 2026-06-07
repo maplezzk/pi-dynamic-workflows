@@ -1,5 +1,5 @@
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
+import { Box, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { cancelRunningWorkflow, createWorkflowTool, renderWorkflowThemed } from "../src/index.js";
 
@@ -36,20 +36,35 @@ export default function extension(pi: ExtensionAPI) {
   // 注册异步模式的结果消息渲染器
   pi.registerMessageRenderer("workflow_result", (message: any, _options: any, theme: any) => {
     const snapshot = message.details;
-    if (snapshot?.name) {
-      return new Text(
-        renderWorkflowThemed(snapshot, theme, {
+    if (!snapshot?.name) return undefined;
+
+    return {
+      render(width: number): string[] {
+        const hasError = snapshot.errorCount > 0;
+        const bgFn = hasError
+          ? (text: string) => theme.bg("toolErrorBg", text)
+          : (text: string) => theme.bg("toolSuccessBg", text);
+        const icon = hasError ? theme.fg("error", "✗") : theme.fg("success", "✓");
+        const status = hasError ? "completed with errors" : "completed";
+        const elapsed = snapshot.durationMs ? `${Math.round(snapshot.durationMs / 1000)}s` : "?";
+
+        const header = `${icon} ${theme.fg("toolTitle", theme.bold(`Workflow: ${snapshot.name}`))} ${theme.fg("dim", "—")} ${status} ${theme.fg("dim", `(${elapsed})`)}`;
+
+        const contentLines = [header, ""];
+        const themed = renderWorkflowThemed(snapshot, theme, {
           key: "workflow",
           streamToolUpdates: true,
           maxAgents: 4,
           maxLogs: 1,
           showResultPreviews: true,
-        }),
-        0,
-        0,
-      );
-    }
-    return new Text(message.content || "workflow completed", 0, 0);
+        });
+        contentLines.push(...themed.split("\n"));
+
+        const box = new Box(1, 1, bgFn);
+        box.addChild(new Text(contentLines.join("\n"), 0, 0));
+        return ["", ...box.render(width)];
+      },
+    };
   });
 
   pi.on("session_start", () => {
