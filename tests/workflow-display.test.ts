@@ -41,7 +41,7 @@ test("createWorkflowSnapshot does not pre-render declared phases", () => {
     phases: [{ title: "Scan" }, { title: "Review" }],
   });
 
-  assert.deepEqual(value.phases, []);
+  assert.deepEqual(value.phases, ["Scan", "Review"]);
 });
 
 test("renderWorkflowLines hides empty phase rows", () => {

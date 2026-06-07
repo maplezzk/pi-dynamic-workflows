@@ -50,7 +50,7 @@ export function createWorkflowSnapshot(meta: WorkflowMeta): WorkflowSnapshot {
   return {
     name: meta.name,
     description: meta.description,
-    phases: [],
+    phases: meta.phases?.map((p) => p.title) ?? [],
     logs: [],
     agents: [],
     agentCount: 0,
@@ -430,11 +430,36 @@ export function renderWorkflowWidgetLines(snapshot: WorkflowSnapshot, width: num
   const RST = "\x1b[0m";
   const GREEN = "\x1b[32m";
   const CYAN = "\x1b[36m";
+  const RED = "\x1b[31m";
   const DIM = "\x1b[90m";
 
   const MAX_VISIBLE_AGENTS = 6;
-  const boxWidth = Math.max(50, Math.min(width, 80));
+  const boxWidth = Math.max(50, width);
   const innerWidth = boxWidth - 2; // exclude │ on each side
+
+  // CJK 双宽字符检测
+  const charWidth = (code: number): number => {
+    if (
+      (code >= 0x1100 && code <= 0x115f) ||
+      (code >= 0x2e80 && code <= 0xa4cf && code !== 0x303f) ||
+      (code >= 0xac00 && code <= 0xd7af) ||
+      (code >= 0xf900 && code <= 0xfaff) ||
+      (code >= 0xfe10 && code <= 0xfe6f) ||
+      (code >= 0xff01 && code <= 0xff60) ||
+      (code >= 0xffe0 && code <= 0xffe6) ||
+      (code >= 0x20000 && code <= 0x2fffd) ||
+      (code >= 0x30000 && code <= 0x3fffd)
+    ) return 2;
+    return 1;
+  };
+
+  const strWidth = (str: string): number => {
+    let w = 0;
+    for (const ch of str) {
+      w += charWidth(ch.codePointAt(0) ?? 0);
+    }
+    return w;
+  };
 
   // Helper: pad content line to fit inside box
   const padLine = (content: string, rawLen: number): string => {
@@ -464,7 +489,6 @@ export function renderWorkflowWidgetLines(snapshot: WorkflowSnapshot, width: num
 
   for (const phase of phaseNames) {
     const agents = snapshot.agents.filter((a) => a.phase === phase);
-    if (agents.length === 0 && snapshot.currentPhase !== phase) continue;
     for (const a of agents) rendered.add(a);
 
     const done = agents.filter((a) => a.status === "done").length;
@@ -484,7 +508,7 @@ export function renderWorkflowWidgetLines(snapshot: WorkflowSnapshot, width: num
     }
 
     const phaseContent = `  ${phaseIcon} ${phase}`;
-    const phaseRawLen = 2 + 1 + 1 + phase.length; // "  " + icon + " " + name
+    const phaseRawLen = 2 + 1 + 1 + strWidth(phase); // "  " + icon + " " + name
     lines.push(padLine(phaseContent, phaseRawLen));
 
     // Agents in this phase
@@ -492,14 +516,21 @@ export function renderWorkflowWidgetLines(snapshot: WorkflowSnapshot, width: num
     for (const agent of visibleAgents) {
       const order = `#${agent.id}`;
       const { icon } = widgetStatusIcon(agent.status);
-      const label = shorten(agent.label, innerWidth - 16);
+      const label = shorten(agent.label, innerWidth - 20);
       const agentElapsed = computeAgentDuration(agent);
       const elapsedText = agentElapsed ? formatElapsed(agentElapsed) : "";
 
+      // 右侧状态文字 + 耗时
+      const statusLabel = agent.status === "done" ? "done"
+        : agent.status === "running" ? "running"
+        : agent.status === "error" ? "error"
+        : "";
+      const rightText = elapsedText ? `${statusLabel} ${elapsedText}` : statusLabel;
       const leftPart = `    ${order} ${icon} ${label}`;
-      const leftRawLen = 4 + order.length + 1 + 1 + 1 + label.length; // "    " + "#N" + " " + icon(1char) + " " + label
-      const rightPart = elapsedText ? `${DIM}${elapsedText}${RST}` : "";
-      const rightRawLen = elapsedText.length;
+      const leftRawLen = 4 + order.length + 1 + 1 + 1 + strWidth(label);
+      const statusColor = agent.status === "done" ? GREEN : agent.status === "running" ? CYAN : agent.status === "error" ? RED : DIM;
+      const rightPart = rightText ? `${statusColor}${rightText}${RST}` : "";
+      const rightRawLen = rightText.length;
 
       const gapLen = Math.max(1, innerWidth - leftRawLen - rightRawLen);
       const agentLine = `${leftPart}${" ".repeat(gapLen)}${rightPart}`;
@@ -519,14 +550,20 @@ export function renderWorkflowWidgetLines(snapshot: WorkflowSnapshot, width: num
     for (const agent of visibleAgents) {
       const order = `#${agent.id}`;
       const { icon } = widgetStatusIcon(agent.status);
-      const label = shorten(agent.label, innerWidth - 16);
+      const label = shorten(agent.label, innerWidth - 20);
       const agentElapsed = computeAgentDuration(agent);
       const elapsedText = agentElapsed ? formatElapsed(agentElapsed) : "";
 
+      const statusLabel = agent.status === "done" ? "done"
+        : agent.status === "running" ? "running"
+        : agent.status === "error" ? "error"
+        : "";
+      const rightText = elapsedText ? `${statusLabel} ${elapsedText}` : statusLabel;
       const leftPart = `    ${order} ${icon} ${label}`;
-      const leftRawLen = 4 + order.length + 1 + 1 + 1 + label.length;
-      const rightPart = elapsedText ? `${DIM}${elapsedText}${RST}` : "";
-      const rightRawLen = elapsedText.length;
+      const leftRawLen = 4 + order.length + 1 + 1 + 1 + strWidth(label);
+      const statusColor = agent.status === "done" ? GREEN : agent.status === "running" ? CYAN : agent.status === "error" ? RED : DIM;
+      const rightPart = rightText ? `${statusColor}${rightText}${RST}` : "";
+      const rightRawLen = rightText.length;
 
       const gapLen = Math.max(1, innerWidth - leftRawLen - rightRawLen);
       const agentLine = `${leftPart}${" ".repeat(gapLen)}${rightPart}`;
