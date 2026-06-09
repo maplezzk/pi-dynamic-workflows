@@ -480,7 +480,7 @@ function createWorkflowCallbacks(opts: {
         agent.status = event.result === null ? "error" : "done";
         agent.finishedAt = Date.now();
         if (event.error) agent.error = event.error;
-        if (event.result !== null) {
+        if (event.result != null) {
           const agentsDir = join(opts.cwd, ".pi", "workflows", opts.metaName, "agents");
           mkdirSync(agentsDir, { recursive: true });
           const safeLabel = agent.label.replace(/[/\\:*?"<>|\s]+/g, "_").slice(0, 32);
@@ -500,6 +500,6 @@ function writeResultFile(cwd: string, metaName: string, result: unknown): string
   mkdirSync(outDir, { recursive: true });
   const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const outFile = join(outDir, `${metaName}-${ts}.json`);
-  writeFileSync(outFile, JSON.stringify(result, null, 2), "utf8");
+  writeFileSync(outFile, JSON.stringify(result ?? null, null, 2), "utf8");
   return outFile;
 }
