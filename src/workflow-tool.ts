@@ -424,10 +424,6 @@ function createWorkflowRunOptions(opts: {
     },
     subagent: {
       launchCtx: opts.ctx as any,
-      model:
-        typeof opts.ctx.model === "string"
-          ? opts.ctx.model
-          : ((opts.ctx.model as any)?.id ?? String(opts.ctx.model ?? "")),
       cwd: opts.cwd,
     },
   };
