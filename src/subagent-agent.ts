@@ -77,6 +77,8 @@ export interface AgentRunOptions {
   schema?: unknown;
   signal?: AbortSignal;
   instructions?: string;
+  /** 覆盖 subagent 的模型，不传则走默认 fallback */
+  model?: string;
 }
 
 export type AgentRunResult = unknown;
@@ -110,7 +112,7 @@ export class SubagentWorkflowAgent {
       {
         name: options.label ?? "workflow-agent",
         task,
-        model: this.model,
+        model: options.model ?? this.model,
         cwd: this.cwd,
         ...(options.schema ? { structuredOutputSchema: options.schema } : {}),
       },
