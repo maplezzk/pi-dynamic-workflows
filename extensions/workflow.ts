@@ -4,6 +4,13 @@ import { Type } from "typebox";
 import { cancelRunningWorkflow, createWorkflowTool, renderWorkflowThemed } from "../src/index.js";
 
 export default function extension(pi: ExtensionAPI) {
+  // Subagent session 不注册 workflow 工具：subagent 是 workflow 的执行节点，
+  // 不应再拥有启动 workflow 的能力（防止递归调用、误激活、误取消等）。
+  // pi-interactive-subagents 启动子 pi session 时会设置 PI_SUBAGENT_NAME。
+  if (process.env.PI_SUBAGENT_NAME) {
+    return;
+  }
+
   const workflowTool = createWorkflowTool({ pi });
   pi.registerTool(workflowTool);
 

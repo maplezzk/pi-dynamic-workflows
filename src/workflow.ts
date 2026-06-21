@@ -112,6 +112,11 @@ export async function runWorkflow<T = unknown>(
     if (budget.total !== null && budget.remaining() <= 0) throw new Error("workflow token budget exhausted");
     const taskPrompt = requireString(prompt, "agent prompt");
     const normalizedOptions = normalizeAgentOptions(agentOptions);
+    if (!normalizedOptions.schema) {
+      throw new TypeError(
+        "agent() requires a `schema` parameter. Pass a JSON Schema via `agent(prompt, { schema: ... })`.",
+      );
+    }
     const assignedPhase = normalizedOptions.phase ?? state.currentPhase;
     const requestedLabel = normalizedOptions.label?.trim();
     const run = limiter(async () => {

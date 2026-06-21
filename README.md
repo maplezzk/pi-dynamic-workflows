@@ -89,7 +89,7 @@ This declares `agent`, `parallel`, `pipeline`, `phase`, `log`, `args`, `cwd`, an
 
 | Global | Description |
 | --- | --- |
-| `agent(prompt, opts)` | Spawn an isolated subagent. Returns its final text or, with `opts.schema`, a validated object. |
+| `agent(prompt, opts)` | Spawn an isolated subagent. `opts.schema` (JSON Schema) is REQUIRED and defines the structure of the validated object the subagent returns. |
 | `parallel(thunks)` | Run an array of `() => agent(...)` thunks concurrently. Results are returned in input order. |
 | `pipeline(items, ...stages)` | Run each item through sequential stages while items fan out. Each stage receives `(prev, original, index)`. |
 | `phase(title)` | Mark the current phase. Used for grouping in the live progress view. |
@@ -111,7 +111,7 @@ This keeps `meta` parseable, runs reproducible, and the surface area small.
 
 ### Structured subagent output
 
-Pass a JSON Schema via `opts.schema` and the subagent will return a validated object:
+Pass a JSON Schema via `opts.schema` (REQUIRED) and the subagent will return a validated object:
 
 ```js
 const finding = await agent('Find security-sensitive files.', {

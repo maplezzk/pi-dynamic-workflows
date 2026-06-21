@@ -16,7 +16,7 @@ test("runWorkflow accepts metadata without phases and records runtime phases", a
 }
 
 phase('Scan')
-const scan = await agent('scan', { label: 'scan' })
+const scan = await agent('scan', { label: 'scan', schema: {} })
 return { scan }
 `,
     { agent: fakeAgent },
@@ -37,12 +37,12 @@ test("runWorkflow records loop-created phases without skipped conditional phases
 
 if (args.needsReview) {
   phase('Review')
-  await agent('review', { label: 'review' })
+  await agent('review', { label: 'review', schema: {} })
 }
 
 for (const area of args.areas) {
   phase('Inspect ' + area)
-  await agent('inspect ' + area, { label: 'inspect ' + area })
+  await agent('inspect ' + area, { label: 'inspect ' + area, schema: {} })
 }
 
 return { ok: true }
@@ -69,7 +69,7 @@ test("runWorkflow rejects unawaited nested agent promises before returning detai
 }
 
 phase('Leak promise')
-const scan = agent('scan', { label: 'scan' })
+const scan = agent('scan', { label: 'scan', schema: {} })
 return { scan }
 `,
         {
@@ -111,7 +111,7 @@ test("runWorkflow allows prompts that mention nondeterministic API names", async
 }
 
 phase('Catalog mentions')
-const scan = await agent('Catalog Date.now(), Math.random(), and new Date() usage', { label: 'scan' })
+const scan = await agent('Catalog Date.now(), Math.random(), and new Date() usage', { label: 'scan', schema: {} })
 return { scan }
 `,
     { agent: fakeAgent },
