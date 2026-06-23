@@ -276,6 +276,56 @@ function shorten(value: string, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
+/**
+ * CJK 双宽字符检测：返回字符的终端可见宽度（1 或 2）。
+ */
+function cjkCharWidth(code: number): number {
+  if (
+    (code >= 0x1100 && code <= 0x115f) ||
+    (code >= 0x2e80 && code <= 0xa4cf && code !== 0x303f) ||
+    (code >= 0xac00 && code <= 0xd7af) ||
+    (code >= 0xf900 && code <= 0xfaff) ||
+    (code >= 0xfe10 && code <= 0xfe6f) ||
+    (code >= 0xff01 && code <= 0xff60) ||
+    (code >= 0xffe0 && code <= 0xffe6) ||
+    (code >= 0x20000 && code <= 0x2fffd) ||
+    (code >= 0x30000 && code <= 0x3fffd)
+  )
+    return 2;
+  return 1;
+}
+
+/**
+ * 计算字符串的终端可见宽度（考虑 CJK 双宽字符）。
+ */
+function visibleStrWidth(str: string): number {
+  let w = 0;
+  for (const ch of str) {
+    w += cjkCharWidth(ch.codePointAt(0) ?? 0);
+  }
+  return w;
+}
+
+/**
+ * 按可见宽度截断字符串，超出部分用省略号「…」替代。
+ * 用于 TUI widget 行内容截断，防止超出终端宽度导致 pi-tui 崩溃。
+ */
+function truncateVisible(str: string, maxWidth: number): string {
+  if (maxWidth <= 0) return "";
+  const w = visibleStrWidth(str);
+  if (w <= maxWidth) return str;
+  const target = maxWidth - 1; // 留给「…」
+  let result = "";
+  let currentWidth = 0;
+  for (const ch of str) {
+    const cw = cjkCharWidth(ch.codePointAt(0) ?? 0);
+    if (currentWidth + cw > target) break;
+    result += ch;
+    currentWidth += cw;
+  }
+  return `${result}…`;
+}
+
 export function preview(value: unknown, max = 200): string {
   const text = typeof value === "string" ? value : JSON.stringify(value);
   if (!text) return "";
@@ -435,47 +485,56 @@ export function renderWorkflowWidgetLines(snapshot: WorkflowSnapshot, width: num
   const DIM = "\x1b[90m";
 
   const MAX_VISIBLE_AGENTS = 6;
-  const boxWidth = Math.max(50, width);
+  // boxWidth 必须严格不超过终端实际宽度，否则 pi-tui 会因行超出终端宽度而崩溃。
+  // 原先 Math.max(50, width) 在窄终端（如 43 列分屏）下强制设为 50，导致渲染行
+  // visible width=50 > 终端宽度 43，pi-tui 抛出 uncaughtException 退出。
+  // 修复：去掉 50 上限，让 widget 跟随终端实际宽度自适应填满。
+  // 最小 20 是为了保证极窄终端下 innerWidth=18 有足够空间显示基本内容。
+  const boxWidth = Math.max(20, width);
   const innerWidth = boxWidth - 2; // exclude │ on each side
 
-  // CJK 双宽字符检测
-  const charWidth = (code: number): number => {
-    if (
-      (code >= 0x1100 && code <= 0x115f) ||
-      (code >= 0x2e80 && code <= 0xa4cf && code !== 0x303f) ||
-      (code >= 0xac00 && code <= 0xd7af) ||
-      (code >= 0xf900 && code <= 0xfaff) ||
-      (code >= 0xfe10 && code <= 0xfe6f) ||
-      (code >= 0xff01 && code <= 0xff60) ||
-      (code >= 0xffe0 && code <= 0xffe6) ||
-      (code >= 0x20000 && code <= 0x2fffd) ||
-      (code >= 0x30000 && code <= 0x3fffd)
-    )
-      return 2;
-    return 1;
-  };
+  // 可见宽度辅助函数（考虑 CJK 双宽字符），已抽离为模块级 visibleStrWidth
+  const strWidth = visibleStrWidth;
 
-  const strWidth = (str: string): number => {
-    let w = 0;
-    for (const ch of str) {
-      w += charWidth(ch.codePointAt(0) ?? 0);
-    }
-    return w;
-  };
-
-  // Helper: pad content line to fit inside box
+  // Helper: pad content line to fit inside box.
+  // 不变式：调用方保证 rawLen <= innerWidth，padLine 只补右侧空白到 innerWidth。
   const padLine = (content: string, rawLen: number): string => {
     const padding = Math.max(0, innerWidth - rawLen);
     return `${ACCENT}│${RST}${content}${" ".repeat(padding)}${ACCENT}│${RST}`;
   };
 
   // Title line: ╭─ Workflow: {name} ──── {done}/{total} done ─╮
-  const titleText = ` Workflow: ${snapshot.name} `;
-  const statsText = ` ${snapshot.doneCount}/${snapshot.agentCount} done `;
-  const fillLen = Math.max(1, boxWidth - 2 - titleText.length - statsText.length - 2); // -2 for ╭╮, -2 for ─ on edges
+  // 标题结构：╭ + ─ + titleText + ─*fill + statsText + ─ + ╮
+  // 总可见宽度 = 1(╭) + 1(─) + titleTextW + fillLen + statsTextW + 1(─) + 1(╮)
+  //           = 4 + titleTextW + fillLen + statsTextW
+  // fillLen 至少 1。极窄终端下逐步压缩 titlePrefix/statsText。
+  let titlePrefix = ` Workflow: `;
+  let statsText = ` ${snapshot.doneCount}/${snapshot.agentCount} done `;
+  // 判断在最小 fill(1) 下能否装下：4 + prefixW + 1(name至少1) + 1(fill) + statsW + 1(尾部空格) <= boxWidth
+  const tryFit = (prefix: string, stats: string): boolean =>
+    4 + strWidth(prefix) + 1 + 1 + strWidth(stats) + 1 <= boxWidth;
+  if (!tryFit(titlePrefix, statsText)) {
+    statsText = ` ${snapshot.doneCount}/${snapshot.agentCount} `;
+  }
+  if (!tryFit(titlePrefix, statsText)) {
+    titlePrefix = ` `;
+    statsText = `${snapshot.doneCount}/${snapshot.agentCount}`;
+  }
+  if (!tryFit(titlePrefix, statsText)) {
+    // 极窄：只显示 name + 边框
+    titlePrefix = ``;
+    statsText = ``;
+  }
+  // 固定占用 4（╭ ─ ─ ╮，不含 titleText/statsText/fill）
+  const fixedOverhead = 4;
+  // titleText = titlePrefix + name + " "（尾部空格）
+  const maxNameWidth = Math.max(1, boxWidth - fixedOverhead - strWidth(titlePrefix) - strWidth(statsText) - 2); // -1 尾空格 -1 fill
+  const truncatedName = truncateVisible(snapshot.name, maxNameWidth);
+  const titleText = `${titlePrefix}${truncatedName} `;
+  const fillLen = Math.max(1, boxWidth - fixedOverhead - strWidth(titleText) - strWidth(statsText));
   const topLine = `${ACCENT}╭─${titleText}${"─".repeat(fillLen)}${statsText}─╮${RST}`;
 
-  // Bottom line
+  // Bottom line: ╰ + ─*(boxWidth-2) + ╯
   const bottomLine = `${ACCENT}╰${"─".repeat(boxWidth - 2)}╯${RST}`;
 
   const lines: string[] = [topLine];
@@ -488,6 +547,60 @@ export function renderWorkflowWidgetLines(snapshot: WorkflowSnapshot, width: num
     ...agentPhaseNames,
   ]);
   const rendered = new Set<WorkflowAgentSnapshot>();
+
+  /** 渲染单个 agent 行。返回 padLine 后的字符串。 */
+  const renderAgentLine = (agent: WorkflowAgentSnapshot): string => {
+    const order = `#${agent.id}`;
+    const { icon } = widgetStatusIcon(agent.status);
+    const agentElapsed = computeAgentDuration(agent);
+    const elapsedText = agentElapsed ? formatElapsed(agentElapsed) : "";
+
+    const statusLabel =
+      agent.status === "done"
+        ? "done"
+        : agent.status === "running"
+          ? "running"
+          : agent.status === "error"
+            ? "error"
+            : "";
+    let rightText = elapsedText ? `${statusLabel} ${elapsedText}` : statusLabel;
+    let rightRawLen = rightText.length;
+    const statusColor =
+      agent.status === "done" ? GREEN : agent.status === "running" ? CYAN : agent.status === "error" ? RED : DIM;
+    let rightPart = rightText ? `${statusColor}${rightText}${RST}` : "";
+
+    // 布局："    " + order + " " + icon + " " + label + gap + rightText
+    // 左侧固定部分宽度（不含 label）：4(空格) + orderW + 1(空格) + 1(icon) + 1(空格)
+    const leftFixedWidth = 4 + order.length + 1 + 1 + 1;
+    // 如果有 rightText，需留至少 1 个 gap + rightRawLen
+    let minRightWidth = rightRawLen > 0 ? 1 + rightRawLen : 0;
+    // 极窄终端下 leftFixedWidth + minRightWidth 可能已超过 innerWidth。
+    // 此时逐步压缩：先去掉耗时，只留状态；再去掉状态，只留 label；最后连 label 也截断。
+    if (leftFixedWidth + minRightWidth > innerWidth) {
+      // 阶段 1：只留状态标签（去掉耗时）
+      rightText = statusLabel;
+      rightRawLen = rightText.length;
+      minRightWidth = rightRawLen > 0 ? 1 + rightRawLen : 0;
+    }
+    if (leftFixedWidth + minRightWidth > innerWidth) {
+      // 阶段 2：去掉右侧状态，只留左侧 label
+      rightText = "";
+      rightRawLen = 0;
+      rightPart = "";
+      minRightWidth = 0;
+    }
+    const labelMaxWidth = Math.max(1, innerWidth - leftFixedWidth - minRightWidth);
+    const label = truncateVisible(agent.label.replace(/\s+/g, " ").trim(), labelMaxWidth);
+
+    const leftPart = `    ${order} ${icon} ${label}`;
+    const leftRawLen = leftFixedWidth + strWidth(label);
+
+    // gap 填充剩余空间；如果没有 rightText，gap 可以是 0（label 占满）
+    const gapLen = Math.max(rightRawLen > 0 ? 1 : 0, innerWidth - leftRawLen - rightRawLen);
+    const agentLine = `${leftPart}${" ".repeat(gapLen)}${rightPart}`;
+    const agentRawLen = leftRawLen + gapLen + rightRawLen;
+    return padLine(agentLine, agentRawLen);
+  };
 
   for (const phase of phaseNames) {
     const agents = snapshot.agents.filter((a) => a.phase === phase);
@@ -509,44 +622,29 @@ export function renderWorkflowWidgetLines(snapshot: WorkflowSnapshot, width: num
       phaseIcon = `${DIM}○${RST}`;
     }
 
-    const phaseContent = `  ${phaseIcon} ${phase}`;
-    const phaseRawLen = 2 + 1 + 1 + strWidth(phase); // "  " + icon + " " + name
+    // Phase 行：按可见宽度截断 phase 名称，防止超出 innerWidth
+    // 布局："  " + icon(1) + " " + phaseName，总共占 2+1+1+nameW = 4+nameW
+    const phaseNameMaxWidth = Math.max(1, innerWidth - 4);
+    const truncatedPhase = truncateVisible(phase, phaseNameMaxWidth);
+    const phaseContent = `  ${phaseIcon} ${truncatedPhase}`;
+    const phaseRawLen = 2 + 1 + 1 + strWidth(truncatedPhase); // "  " + icon + " " + name
     lines.push(padLine(phaseContent, phaseRawLen));
 
     // Agents in this phase
     const visibleAgents = agents.slice(-MAX_VISIBLE_AGENTS);
     for (const agent of visibleAgents) {
-      const order = `#${agent.id}`;
-      const { icon } = widgetStatusIcon(agent.status);
-      const label = shorten(agent.label, innerWidth - 20);
-      const agentElapsed = computeAgentDuration(agent);
-      const elapsedText = agentElapsed ? formatElapsed(agentElapsed) : "";
-
-      // 右侧状态文字 + 耗时
-      const statusLabel =
-        agent.status === "done"
-          ? "done"
-          : agent.status === "running"
-            ? "running"
-            : agent.status === "error"
-              ? "error"
-              : "";
-      const rightText = elapsedText ? `${statusLabel} ${elapsedText}` : statusLabel;
-      const leftPart = `    ${order} ${icon} ${label}`;
-      const leftRawLen = 4 + order.length + 1 + 1 + 1 + strWidth(label);
-      const statusColor =
-        agent.status === "done" ? GREEN : agent.status === "running" ? CYAN : agent.status === "error" ? RED : DIM;
-      const rightPart = rightText ? `${statusColor}${rightText}${RST}` : "";
-      const rightRawLen = rightText.length;
-
-      const gapLen = Math.max(1, innerWidth - leftRawLen - rightRawLen);
-      const agentLine = `${leftPart}${" ".repeat(gapLen)}${rightPart}`;
-      const agentRawLen = leftRawLen + gapLen + rightRawLen;
-      lines.push(padLine(agentLine, agentRawLen));
+      lines.push(renderAgentLine(agent));
     }
     if (agents.length > visibleAgents.length) {
       const moreText = `    … ${agents.length - visibleAgents.length} earlier`;
-      lines.push(padLine(`  ${DIM}${moreText}${RST}`, 2 + moreText.length));
+      const moreRawLen = 2 + moreText.length;
+      // 极窄终端下 moreText 可能超过 innerWidth，截断保护
+      if (moreRawLen > innerWidth) {
+        const truncated = truncateVisible(`  ${moreText}`, innerWidth);
+        lines.push(padLine(`${DIM}${truncated}${RST}`, strWidth(truncated)));
+      } else {
+        lines.push(padLine(`  ${DIM}${moreText}${RST}`, moreRawLen));
+      }
     }
   }
 
@@ -555,36 +653,17 @@ export function renderWorkflowWidgetLines(snapshot: WorkflowSnapshot, width: num
   if (unphased.length) {
     const visibleAgents = unphased.slice(-MAX_VISIBLE_AGENTS);
     for (const agent of visibleAgents) {
-      const order = `#${agent.id}`;
-      const { icon } = widgetStatusIcon(agent.status);
-      const label = shorten(agent.label, innerWidth - 20);
-      const agentElapsed = computeAgentDuration(agent);
-      const elapsedText = agentElapsed ? formatElapsed(agentElapsed) : "";
-
-      const statusLabel =
-        agent.status === "done"
-          ? "done"
-          : agent.status === "running"
-            ? "running"
-            : agent.status === "error"
-              ? "error"
-              : "";
-      const rightText = elapsedText ? `${statusLabel} ${elapsedText}` : statusLabel;
-      const leftPart = `    ${order} ${icon} ${label}`;
-      const leftRawLen = 4 + order.length + 1 + 1 + 1 + strWidth(label);
-      const statusColor =
-        agent.status === "done" ? GREEN : agent.status === "running" ? CYAN : agent.status === "error" ? RED : DIM;
-      const rightPart = rightText ? `${statusColor}${rightText}${RST}` : "";
-      const rightRawLen = rightText.length;
-
-      const gapLen = Math.max(1, innerWidth - leftRawLen - rightRawLen);
-      const agentLine = `${leftPart}${" ".repeat(gapLen)}${rightPart}`;
-      const agentRawLen = leftRawLen + gapLen + rightRawLen;
-      lines.push(padLine(agentLine, agentRawLen));
+      lines.push(renderAgentLine(agent));
     }
     if (unphased.length > visibleAgents.length) {
       const moreText = `    … ${unphased.length - visibleAgents.length} earlier`;
-      lines.push(padLine(`  ${DIM}${moreText}${RST}`, 2 + moreText.length));
+      const moreRawLen = 2 + moreText.length;
+      if (moreRawLen > innerWidth) {
+        const truncated = truncateVisible(`  ${moreText}`, innerWidth);
+        lines.push(padLine(`${DIM}${truncated}${RST}`, strWidth(truncated)));
+      } else {
+        lines.push(padLine(`  ${DIM}${moreText}${RST}`, moreRawLen));
+      }
     }
   }
 
