@@ -23,7 +23,9 @@ test("parseWorkflowScript accepts literal workflow metadata", () => {
 });
 
 test("parseWorkflowScript accepts static template literals", () => {
-  const parsed = parseWorkflowScript("export const meta = { name: `demo`, description: `static` }\nreturn true");
+  const parsed = parseWorkflowScript(
+    "export const meta = { name: `demo`, description: `static`, phases: [{ title: 'A' }] }\nreturn true",
+  );
   assert.equal(parsed.meta.name, "demo");
   assert.equal(parsed.meta.description, "static");
 });
@@ -36,40 +38,78 @@ test("parseWorkflowScript requires meta export first", () => {
 });
 
 test("parseWorkflowScript requires name and description", () => {
-  assert.throws(() => parseWorkflowScript("export const meta = { name: 'demo' }"), /meta.description/);
-  assert.throws(() => parseWorkflowScript("export const meta = { description: 'desc' }"), /meta.name/);
+  assert.throws(
+    () => parseWorkflowScript("export const meta = { name: 'demo', phases: [{ title: 'A' }] }"),
+    /meta.description/,
+  );
+  assert.throws(
+    () => parseWorkflowScript("export const meta = { description: 'desc', phases: [{ title: 'A' }] }"),
+    /meta.name/,
+  );
+});
+
+test("parseWorkflowScript requires meta.phases", () => {
+  // 缺失
+  assert.throws(
+    () => parseWorkflowScript("export const meta = { name: 'demo', description: 'desc' }"),
+    /meta\.phases must be a non-empty array/,
+  );
+  // 空数组
+  assert.throws(
+    () => parseWorkflowScript("export const meta = { name: 'demo', description: 'desc', phases: [] }"),
+    /meta\.phases must be a non-empty array/,
+  );
+  // 非数组
+  assert.throws(
+    () => parseWorkflowScript("export const meta = { name: 'demo', description: 'desc', phases: 'A' }"),
+    /meta\.phases must be a non-empty array/,
+  );
 });
 
 test("parseWorkflowScript rejects non-literal metadata", () => {
   assert.throws(
-    () => parseWorkflowScript("export const meta = { name: makeName(), description: 'desc' }"),
+    () =>
+      parseWorkflowScript("export const meta = { name: makeName(), description: 'desc', phases: [{ title: 'A' }] }"),
     /non-literal node type.*CallExpression/,
   );
   assert.throws(
-    () => parseWorkflowScript("const name = 'demo'; export const meta = { name, description: 'desc' }"),
+    () =>
+      parseWorkflowScript(
+        "const name = 'demo'; export const meta = { name, description: 'desc', phases: [{ title: 'A' }] }",
+      ),
     /must be the first statement/,
   );
   assert.throws(
-    () => parseWorkflowScript("export const meta = { name: name, description: 'desc' }"),
+    () => parseWorkflowScript("export const meta = { name: name, description: 'desc', phases: [{ title: 'A' }] }"),
     /non-literal node type.*Identifier/,
   );
 });
 
 test("parseWorkflowScript rejects object hazards", () => {
   assert.throws(
-    () => parseWorkflowScript("export const meta = { ...base, name: 'demo', description: 'desc' }"),
+    () =>
+      parseWorkflowScript(
+        "export const meta = { ...base, name: 'demo', description: 'desc', phases: [{ title: 'A' }] }",
+      ),
     /spread not allowed/,
   );
   assert.throws(
-    () => parseWorkflowScript("export const meta = { ['name']: 'demo', description: 'desc' }"),
+    () =>
+      parseWorkflowScript("export const meta = { ['name']: 'demo', description: 'desc', phases: [{ title: 'A' }] }"),
     /computed keys not allowed/,
   );
   assert.throws(
-    () => parseWorkflowScript("export const meta = { __proto__: {}, name: 'demo', description: 'desc' }"),
+    () =>
+      parseWorkflowScript(
+        "export const meta = { __proto__: {}, name: 'demo', description: 'desc', phases: [{ title: 'A' }] }",
+      ),
     /reserved key name/,
   );
   assert.throws(
-    () => parseWorkflowScript("export const meta = { get name() { return 'demo' }, description: 'desc' }"),
+    () =>
+      parseWorkflowScript(
+        "export const meta = { get name() { return 'demo' }, description: 'desc', phases: [{ title: 'A' }] }",
+      ),
     /methods\/accessors not allowed/,
   );
 });
@@ -87,7 +127,10 @@ test("parseWorkflowScript rejects array hazards", () => {
 
 test("parseWorkflowScript rejects template interpolation", () => {
   assert.throws(
-    () => parseWorkflowScript("export const meta = { name: `demo_$" + "{id}`, description: 'desc' }"),
+    () =>
+      parseWorkflowScript(
+        "export const meta = { name: `demo_$" + "{id}`, description: 'desc', phases: [{ title: 'A' }] }",
+      ),
     /template interpolation not allowed/,
   );
 });
@@ -111,7 +154,10 @@ test("parseWorkflowScript rejects nondeterministic APIs", () => {
     "`timestamp $" + "{Date.now()}`",
   ]) {
     assert.throws(
-      () => parseWorkflowScript(`export const meta = { name: 'demo', description: 'desc' }\nreturn ${expression}`),
+      () =>
+        parseWorkflowScript(
+          `export const meta = { name: 'demo', description: 'desc', phases: [{ title: 'A' }] }\nreturn ${expression}`,
+        ),
       /must be deterministic/,
       expression,
     );
@@ -129,7 +175,10 @@ test("parseWorkflowScript allows deterministic Date and Math APIs", () => {
     "({ random: () => 1 }).random()",
   ]) {
     assert.doesNotThrow(
-      () => parseWorkflowScript(`export const meta = { name: 'demo', description: 'desc' }\nreturn ${expression}`),
+      () =>
+        parseWorkflowScript(
+          `export const meta = { name: 'demo', description: 'desc', phases: [{ title: 'A' }] }\nreturn ${expression}`,
+        ),
       expression,
     );
   }

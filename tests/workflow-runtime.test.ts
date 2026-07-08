@@ -8,11 +8,12 @@ const fakeAgent = {
   },
 };
 
-test("runWorkflow accepts metadata without phases and records runtime phases", async () => {
+test("runWorkflow records runtime phases alongside declared meta.phases", async () => {
   const result = await runWorkflow(
     `export const meta = {
   name: 'dynamic_demo',
-  description: 'Use runtime phases'
+  description: 'Use runtime phases',
+  phases: [{ title: 'Scan' }]
 }
 
 phase('Scan')
@@ -65,7 +66,8 @@ test("runWorkflow rejects unawaited nested agent promises before returning detai
       runWorkflow(
         `export const meta = {
   name: 'promise_leak',
-  description: 'Return an unawaited agent promise'
+  description: 'Return an unawaited agent promise',
+  phases: [{ title: 'Leak promise' }]
 }
 
 phase('Leak promise')
@@ -91,7 +93,8 @@ test("runWorkflow rejects non-string runtime phase titles", async () => {
       runWorkflow(
         `export const meta = {
   name: 'bad_phase',
-  description: 'Use a non-string phase title'
+  description: 'Use a non-string phase title',
+  phases: [{ title: 'Scan' }]
 }
 
 phase(Promise.resolve('Scan'))
@@ -107,7 +110,8 @@ test("runWorkflow allows prompts that mention nondeterministic API names", async
   const result = await runWorkflow(
     `export const meta = {
   name: 'prompt_mentions',
-  description: 'Ask about Date.now(), Math.random(), and new Date() usage'
+  description: 'Ask about Date.now(), Math.random(), and new Date() usage',
+  phases: [{ title: 'Catalog mentions' }]
 }
 
 phase('Catalog mentions')

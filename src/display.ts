@@ -51,7 +51,7 @@ export function createWorkflowSnapshot(meta: WorkflowMeta): WorkflowSnapshot {
   return {
     name: meta.name,
     description: meta.description,
-    phases: meta.phases?.map((p) => p.title) ?? [],
+    phases: meta.phases.map((p) => p.title),
     logs: [],
     agents: [],
     agentCount: 0,

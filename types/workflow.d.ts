@@ -14,8 +14,8 @@ declare global {
     name: string;
     description: string;
     whenToUse?: string;
-    /** Optional documentation for an expected outline. Live progress is driven by `phase(...)`. */
-    phases?: WorkflowMetaPhase[];
+    /** Required documentation for the expected outline. Live progress is driven by `phase(...)`. */
+    phases: WorkflowMetaPhase[];
   }
 
   interface WorkflowMetaPhase {

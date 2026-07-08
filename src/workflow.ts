@@ -17,7 +17,7 @@ export interface WorkflowMeta {
   name: string;
   description: string;
   whenToUse?: string;
-  phases?: WorkflowMetaPhase[];
+  phases: WorkflowMetaPhase[];
 }
 
 export interface WorkflowRunOptions extends WorkflowAgentOptions {
@@ -395,12 +395,12 @@ function validateMeta(meta: unknown): asserts meta is WorkflowMeta {
     throw new Error("meta.description must be a non-empty string");
   if (value.whenToUse !== undefined && typeof value.whenToUse !== "string")
     throw new Error("meta.whenToUse must be a string");
-  if (value.phases !== undefined) {
-    if (!Array.isArray(value.phases)) throw new Error("meta.phases must be an array");
-    for (const phase of value.phases) {
-      if (!phase || typeof phase !== "object" || typeof (phase as WorkflowMetaPhase).title !== "string") {
-        throw new Error("each meta phase must have a title string");
-      }
+  if (!Array.isArray(value.phases) || value.phases.length === 0) {
+    throw new Error("meta.phases must be a non-empty array of { title: string } objects");
+  }
+  for (const phase of value.phases) {
+    if (!phase || typeof phase !== "object" || typeof (phase as WorkflowMetaPhase).title !== "string") {
+      throw new Error("each meta phase must have a title string");
     }
   }
 }
