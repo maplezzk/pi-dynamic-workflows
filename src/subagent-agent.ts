@@ -7,6 +7,23 @@
  * rather than the in-memory session's structured_output mechanism.
  */
 
+// ── defensive .jsonl validator ──
+// 拦截 pollForExit 误判（fast path 命中残留 .exit 或 slow path 读到 stale
+// sentinel）导致的"子 agent 根本没启动就被判定完成"。herdr-split.log 9:01 失败批次
+// 模式：pane run 6ms 后 close，subagentSessionFile.jsonl 永远不存在。
+import { existsSync, statSync } from "node:fs";
+
+function sessionFileLooksValid(jsonlPath: string): { ok: boolean; reason: string; size: number } {
+  if (!existsSync(jsonlPath)) return { ok: false, reason: "missing", size: 0 };
+  try {
+    const size = statSync(jsonlPath).size;
+    if (size === 0) return { ok: false, reason: "empty", size: 0 };
+    return { ok: true, reason: "ok", size };
+  } catch (e: any) {
+    return { ok: false, reason: `stat_failed:${e?.code ?? e?.message ?? "unknown"}`, size: 0 };
+  }
+}
+
 // ── types lifted from pi-interactive-subagents ──
 interface SubagentCtx {
   sessionManager: {
@@ -17,6 +34,7 @@ interface SubagentCtx {
   cwd: string;
   model?: unknown;
   modelRegistry?: unknown;
+  ui?: { notify?(message: string, level: "info" | "warning" | "error"): void };
   [key: string]: unknown;
 }
 
@@ -108,6 +126,7 @@ export class SubagentWorkflowAgent {
     ].filter(Boolean);
     const task = taskParts.join("\n\n");
 
+    const launchedAt = Date.now();
     const running = await api.launchSubagent(
       {
         name: options.label ?? "workflow-agent",
@@ -118,6 +137,7 @@ export class SubagentWorkflowAgent {
       },
       this.launchCtx,
     );
+    this.launchCtx.ui?.notify?.(`[workflow] "${options.label ?? "workflow-agent"}" launched (${Date.now() - launchedAt}ms)`, "info");
 
     // Create abort signal that combines caller's signal with module-level abort
     const abortController = new AbortController();
@@ -132,12 +152,45 @@ export class SubagentWorkflowAgent {
     }
 
     try {
+      const watchStartedAt = Date.now();
       const result = await api.watchSubagent(running, abortController.signal);
+      const watchTookMs = Date.now() - watchStartedAt;
+      this.launchCtx.ui?.notify?.(
+        `[workflow] "${options.label ?? "workflow-agent"}" done (${watchTookMs}ms) → ` +
+          `exitCode=${result.exitCode} hasOutput=${result.structuredOutput !== undefined}`,
+        "info",
+      );
 
       if (options.signal?.aborted) throw new Error("Subagent was aborted");
 
+      // 防御性校验：pollForExit 任何 reason (done / structured_output / ping / sentinel)
+      // 都要求 .jsonl 实际存在 + 非空。如果 .jsonl 不存在/为空，说明子 pi 根本没启动
+      // （典型场景：pane run 6ms 内 close、herdr 静默失败、stale .exit 残留命中 fast path）。
+      // 这种"假成功"比"明确失败"更危险——workflow 会把空数据当成结果继续往下走。
+      const jsonlCheck = sessionFileLooksValid(running.sessionFile);
+      if (!jsonlCheck.ok) {
+        this.launchCtx.ui?.notify?.(
+          `[workflow] "${options.label ?? "workflow-agent"}" SESSION FILE ${jsonlCheck.reason} ` +
+            `(${watchTookMs}ms, session ${running.sessionFile}) — ` +
+            `subagent never actually started, likely pollForExit false positive`,
+          "error",
+        );
+        throw new Error(
+          `Subagent pollForExit returned in ${watchTookMs}ms but session file is ` +
+            `${jsonlCheck.reason} (${running.sessionFile}). ` +
+            `This indicates the subagent never actually started — ` +
+            `likely a false positive from pollForExit (herdr workspace state issue). ` +
+            `Try restarting the herdr workspace or check for stale .exit sidecar files.`,
+        );
+      }
+
       if (options.schema) {
         if (result.structuredOutput === undefined) {
+          this.launchCtx.ui?.notify?.(
+            `[workflow] "${options.label ?? "workflow-agent"}" ${watchTookMs}ms exitCode=${result.exitCode} ` +
+              `— finished without calling structured_output`,
+            "warning",
+          );
           throw new Error("Subagent finished without calling structured_output");
         }
         return result.structuredOutput as AgentRunResult;
