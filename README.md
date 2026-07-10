@@ -11,7 +11,7 @@ Inspired by Anthropic's [dynamic workflows in Claude Code](https://claude.com/bl
 ## Install
 
 ```bash
-pi install npm:pi-dynamic-workflows
+pi install git:github.com/maplezzk/pi-dynamic-workflows
 # or from a local checkout
 pi install /path/to/pi-dynamic-workflows
 ```
