@@ -143,6 +143,24 @@ user prompt
 
 Subagents run in fresh in-memory Pi sessions with the standard coding tools, so they can read files, run shell commands, and call structured output exactly like a normal Pi turn.
 
+### Backend modes
+
+The workflow runtime supports two agent backends:
+
+| Mode | Activation | Description |
+| --- | --- | --- |
+| **In-process** (default) | No extra config | Each `agent()` call runs an in-memory Pi session directly. No additional dependencies needed. |
+| **Subagent** | `PI_WORKFLOW_BACKEND=subagent` | Each `agent()` call delegates to a real tmux-pane subagent via `pi-interactive-subagents`. Subagents get full tool access in isolated panes. |
+
+The subagent backend resolves the `pi-interactive-subagents` API at runtime from `globalThis.__pi_subagents` (injected by the `pi-interactive-subagents` extension). It is **not** declared as a package dependency — if you set `PI_WORKFLOW_BACKEND=subagent` without that extension loaded, the workflow will throw:
+
+```text
+PI_WORKFLOW_BACKEND=subagent 需要 pi-interactive-subagents 扩展。
+安装: pi install pi-interactive-subagents
+```
+
+For most use cases the default in-process backend is sufficient and faster. Use the subagent backend when you need each agent to run in a fully isolated terminal environment with persistent tool state.
+
 ## Library modules
 
 | File | Purpose |
